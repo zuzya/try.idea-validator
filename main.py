@@ -7,21 +7,24 @@ from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 import os
 from config import llm_generator, llm_critic, llm_router, GENERATOR_SYSTEM_PROMPT, CRITIC_SYSTEM_PROMPT
+import time
+import json
+import re
 
 load_dotenv()
 
 # --- 1. Data Structures (Pydantic Models) ---
 
 class BusinessIdea(BaseModel):
-    title: str = Field(description="The name of the business idea")
-    description: str = Field(description="A detailed description of the idea")
-    monetization_strategy: str = Field(description="How the business will make money")
-    target_audience: str = Field(description="Who the product is for")
+    title: str = Field(description="Название стартапа (на русском)")
+    description: str = Field(description="Суть продукта, ценностное предложение (на русском)")
+    monetization_strategy: str = Field(description="Модель заработка: подписка, комиссия и т.д. (на русском)")
+    target_audience: str = Field(description="Целевая аудитория в РФ (на русском)")
 
 class CritiqueFeedback(BaseModel):
-    is_approved: bool = Field(description="Whether the idea is ready for launch")
-    feedback: str = Field(description="Actionable advice for improvement")
-    score: int = Field(description="Rating from 1-10", ge=1, le=10)
+    is_approved: bool = Field(description="True если оценка >= 8")
+    feedback: str = Field(description="Подробная критика, риски и советы (на русском языке)")
+    score: int = Field(description="Оценка от 1 до 10", ge=1, le=10)
 
 # --- 2. Graph State ---
 
@@ -34,52 +37,124 @@ class GraphState(TypedDict):
 
 # --- 3. Nodes & Logic ---
 
+# Функция-"чистильщик", которая вытаскивает JSON из любого ответа модели
+def extract_json_from_text(text: str):
+    try:
+        # 1. Пытаемся найти JSON внутри блога кода ```json ... ```
+        match = re.search(r"```json\n(.*?)\n```", text, re.DOTALL)
+        if match:
+            return match.group(1)
+        
+        # 2. Пытаемся найти JSON внутри обычных скобок { ... }
+        match = re.search(r"(\{.*\})", text, re.DOTALL)
+        if match:
+            return match.group(1)
+            
+        # 3. Если ничего не нашли, возвращаем как есть (а вдруг там чистый JSON)
+        return text
+    except Exception:
+        return text
+
 def generator_node(state: GraphState) -> GraphState:
-    """
-    Generates or refines a business idea using Gemini 3 Pro (Visionary).
-    """
     print(f"\n--- GENERATOR NODE (Iteration {state['iteration_count']}) ---")
     
-    # 1. Bind Structured Output
-    structured_llm = llm_generator.with_structured_output(BusinessIdea)
+    # ВАЖНО: Мы НЕ используем .with_structured_output, так как он нестабилен
+    # Мы используем обычный invoke и парсим руками.
     
-    # 2. Construct the User Message based on state
+    # Формируем JSON-схему текстом, чтобы модель знала формат
+    schema_instruction = """
+    ВАЖНО: Твой ответ должен быть СТРОГО валидным JSON объектом.
+    Без Markdown, без слов "Вот JSON", без кавычек ```json.
+    
+    Формат JSON:
+    {
+      "title": "Название стартапа (String)",
+      "description": "Суть продукта и ценность (String)",
+      "monetization_strategy": "Модель заработка (String)",
+      "target_audience": "Целевая аудитория (String)"
+    }
+    """
+    
     if state["iteration_count"] == 0:
         print(">> Generating initial ZERO-TO-ONE concept...")
         user_content = f"""
         USER INPUT: '{state['initial_input']}'
         
-        Task: Synthesize a Unicorn startup concept based on late 2025 trends.
+        Task: Synthesize a Unicorn startup concept for the RUSSIAN MARKET (2025).
+        {schema_instruction}
         """
     else:
         print(">> PIVOTING based on Critique...")
-        # We need to serialize the objects to string for the prompt
         current_json = state["current_idea"].model_dump_json(indent=2)
         critique_json = state["critique"].model_dump_json(indent=2)
         
         user_content = f"""
         CRITIQUE RECEIVED. YOU MUST ITERATE OR PIVOT.
         
-        PREVIOUS IDEA VERSION:
+        PREVIOUS IDEA:
         {current_json}
         
-        CRITIC FEEDBACK (GPT-5.1):
+        CRITIC FEEDBACK:
         {critique_json}
         
         INSTRUCTIONS:
-        1. Address the 'fatal_flaws' or specific feedback points.
-        2. If the Unit Economics were rejected, change the monetization model.
-        3. If the Moat was weak, invent a technical advantage.
+        1. Address the fatal flaws.
+        2. Focus on Russian local tech (VK, Telegram, SPB, Gosuslugi).
+        
+        {schema_instruction}
         """
 
-    # 3. Invoke LLM with the Powerful System Prompt
     messages = [
         SystemMessage(content=GENERATOR_SYSTEM_PROMPT),
         HumanMessage(content=user_content)
     ]
 
-    new_idea = structured_llm.invoke(messages)
+    # --- RETRY & PARSE LOGIC ---
+    new_idea = None
+    last_error = None
     
+    for attempt in range(3):
+        try:
+            print(f"   -> Invoking LLM (Attempt {attempt + 1})...")
+            
+            response = llm_generator.invoke(messages)
+            raw_content = response.content
+            
+            # --- FIX: ОБРАБОТКА СПИСКА ---
+            # Если Gemini вернул список блоков [{'type': 'text', 'text': '...'}]
+            if isinstance(raw_content, list):
+                print(f"   -> Detected list output, converting to string...")
+                raw_content = "".join([
+                    block.get("text", "") 
+                    for block in raw_content 
+                    if isinstance(block, dict) and "text" in block
+                ])
+            # -----------------------------
+            
+            # Чистим ответ
+            cleaned_json_str = extract_json_from_text(raw_content)
+            
+            # Парсим в Python dict, а затем в Pydantic
+            data_dict = json.loads(cleaned_json_str)
+            new_idea = BusinessIdea(**data_dict)
+            
+            break # Успех!
+            
+        except Exception as e:
+            print(f"   -> Parse Error on attempt {attempt + 1}: {e}")
+            # print(f"   -> Raw Output causing error: {raw_content[:200]}...") 
+            last_error = e
+
+    if new_idea is None:
+        print("   -> CRITICAL ERROR: Failed to parse JSON from Generator.")
+        # Чтобы не крашить весь процесс, вернем заглушку с ошибкой
+        new_idea = BusinessIdea(
+            title="Ошибка Генерации (Parsing)",
+            description=f"Модель вернула некорректный JSON. Последняя ошибка: {str(last_error)}",
+            monetization_strategy="N/A",
+            target_audience="N/A"
+        )
+
     print(f"   -> Generated: {new_idea.title}")
 
     return {
@@ -114,10 +189,23 @@ def critic_node(state: GraphState) -> GraphState:
         HumanMessage(content=user_content)
     ]
     
-    feedback = structured_llm.invoke(messages)
-    
-    print(f"   -> Verdict: {feedback.is_approved} (Score: {feedback.score}/10)")
-    print(f"   -> Key Feedback: {feedback.feedback[:100]}...") # Print preview
+    try:
+        feedback = structured_llm.invoke(messages)
+        
+        # Validate the response
+        if feedback is None:
+            raise ValueError("LLM returned None. Check API key and model availability.")
+        
+        print(f"   -> Verdict: {feedback.is_approved} (Score: {feedback.score}/10)")
+        print(f"   -> Key Feedback: {feedback.feedback[:100]}...") # Print preview
+    except Exception as e:
+        print(f"   -> ERROR in critic_node: {e}")
+        # Return a default critique to prevent crash
+        feedback = CritiqueFeedback(
+            is_approved=False,
+            feedback=f"Critique failed due to LLM error: {str(e)}",
+            score=1
+        )
         
     return {"critique": feedback}
 
