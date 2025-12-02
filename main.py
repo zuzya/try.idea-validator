@@ -34,6 +34,7 @@ class GraphState(TypedDict):
     critique: Optional[CritiqueFeedback]
     iteration_count: int
     messages: List[BaseMessage] # Optional, but good for history
+    max_iterations: int # Add configurable max iterations
 
 # --- 3. Nodes & Logic ---
 
@@ -217,13 +218,13 @@ def should_continue(state: GraphState) -> str:
     """
     critique = state.get("critique")
     iteration = state["iteration_count"]
-    MAX_ITERATIONS = 5
+    max_iterations = state.get("max_iterations", 5)  # Default 5 if not specified
     
     if critique and critique.is_approved:
         return "end"
     
-    if iteration >= MAX_ITERATIONS:
-        print("Max iterations reached.")
+    if iteration >= max_iterations:
+        print(f"Max iterations reached ({max_iterations}).")
         return "end"
     
     return "continue"

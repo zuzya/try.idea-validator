@@ -33,7 +33,21 @@ if st.button("🚀 Start Simulation", type="primary"):
         st.divider()
         
         # Initialize State for Graph
-        inputs = {"initial_input": user_input, "iteration_count": 0, "current_idea": None, "critique": None, "messages": []}
+        inputs = {
+            "initial_input": user_input, 
+            "iteration_count": 0, 
+            "current_idea": None, 
+            "critique": None, 
+            "messages": [],
+            "max_iterations": max_iter  # Pass the slider value
+        }
+        
+        # Initialize Chat History for Export
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = []
+        
+        # Clear history on new run
+        st.session_state.chat_history = []
         
         # Container for the stream
         stream_container = st.container()
@@ -61,6 +75,13 @@ if st.button("🚀 Start Simulation", type="primary"):
                         with c2:
                             st.markdown("**🎯 Target Audience**")
                             st.info(idea.target_audience)
+                        
+                        # Add to history
+                        st.session_state.chat_history.append({
+                            "role": "generator",
+                            "iteration": iter_count,
+                            "content": idea
+                        })
 
                 # --- HANDLE CRITIC OUTPUT ---
                 elif "critic" in event:
@@ -87,5 +108,45 @@ if st.button("🚀 Start Simulation", type="primary"):
                         if critique.is_approved:
                             st.balloons()
                             st.success("🦄 UNICORN DETECTED! FUNDING UNLOCKED.")
+                        
+                        # Add to history
+                        st.session_state.chat_history.append({
+                            "role": "critic",
+                            "score": critique.score,
+                            "content": critique
+                        })
 
         st.success("Simulation Complete.")
+        
+        # --- EXPORT FUNCTIONALITY ---
+        if st.session_state.chat_history:
+            st.divider()
+            st.subheader("📥 Export History")
+            
+            # Format as Markdown
+            md_output = f"# 🦄 AI Validator Session\n\n**Seed Idea:** {user_input}\n\n---\n\n"
+            
+            for item in st.session_state.chat_history:
+                if item["role"] == "generator":
+                    idea = item["content"]
+                    md_output += f"## 🧠 Generator (Iteration {item['iteration']})\n"
+                    md_output += f"**Title:** {idea.title}\n\n"
+                    md_output += f"**Description:** {idea.description}\n\n"
+                    md_output += f"**Monetization:** {idea.monetization_strategy}\n\n"
+                    md_output += f"**Target Audience:** {idea.target_audience}\n\n"
+                    md_output += "---\n\n"
+                elif item["role"] == "critic":
+                    critique = item["content"]
+                    status = "APPROVED" if critique.is_approved else "REJECTED"
+                    md_output += f"## 🧐 Critic Verdict\n"
+                    md_output += f"**Status:** {status}\n\n"
+                    md_output += f"**Score:** {critique.score}/10\n\n"
+                    md_output += f"**Feedback:** {critique.feedback}\n\n"
+                    md_output += "---\n\n"
+            
+            st.download_button(
+                label="Download Chat History (Markdown)",
+                data=md_output,
+                file_name="unicorn_validator_history.md",
+                mime="text/markdown"
+            )
