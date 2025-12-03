@@ -22,7 +22,16 @@ st.caption("Powered by Gemini 3.0 Pro (Visionary) & GPT-5.1 (Reasoning)")
 with st.sidebar:
     st.header("Configuration")
     max_iter = st.slider("Max Iterations", 1, 10, 5)
+    mock_simulation = st.checkbox("Mock User Interviews (faster testing)", value=False)
     st.info("System is ready. API connections secure.")
+    
+    if mock_simulation:
+        import os
+        os.environ["MOCK_SIMULATION"] = "true"
+        st.warning("⚠️ Mock Mode: User interviews will be simulated with fake data")
+    else:
+        import os
+        os.environ["MOCK_SIMULATION"] = "false"
 
 user_input = st.text_area("Enter your startup idea:", height=100, placeholder="e.g., Uber for walking robotic dogs...")
 
@@ -55,7 +64,7 @@ if st.button("🚀 Start Simulation", type="primary"):
         with stream_container:
             # Run the LangGraph Stream
             # Stream mode ensures we see steps as they happen
-            for event in app.stream(inputs, config={"recursion_limit": max_iter*2 + 2}):
+            for event in app.stream(inputs, config={"recursion_limit": max_iter*2 + 10}):
                 
                 # --- HANDLE GENERATOR OUTPUT ---
                 if "generator" in event:
@@ -77,12 +86,70 @@ if st.button("🚀 Start Simulation", type="primary"):
                             st.info(idea.target_audience)
                         
                         # Add to history
-                        st.session_state.chat_history.append({
-                            "role": "generator",
-                            "iteration": iter_count,
-                            "content": idea
-                        })
-
+                        st.session_state.chat_history.append(f"**Generator Iteration {iter_count}:**\n{idea.title}\n{idea.description}\n")
+                
+                # Handle Researcher Event
+                if "researcher" in event:
+                    state = event["researcher"]
+                    interview_guide = state.get("interview_guide")
+                    if interview_guide:
+                        st.markdown("### 📋 Research Plan Created")
+                        with st.expander("View Hypotheses & Target Personas", expanded=True):
+                            st.markdown("**Target Personas for Interview:**")
+                            for p in interview_guide.target_personas:
+                                with st.container():
+                                    st.markdown(f"**{p.name}** - {p.role}")
+                                    st.caption(f"*{p.archetype}:* {p.context}")
+                                    st.divider()
+                            
+                            st.markdown("**Hypotheses to Test:**")
+                            for h in interview_guide.hypotheses_to_test:
+                                st.markdown(f"- **[{h.type}]** {h.description}")
+                        st.session_state.chat_history.append(f"**Research Plan:**\nPersonas: {len(interview_guide.target_personas)}\n")
+                
+                # Handle Simulation Event
+                if "simulation" in event:
+                    state = event["simulation"]
+                    raw_interviews = state.get("raw_interviews", [])
+                    if raw_interviews:
+                        st.markdown("### 🗣️ User Interviews Simulated")
+                        for interview in raw_interviews:
+                            with st.container():
+                                st.markdown(f"**{interview.persona.name}** ({interview.persona.role})")
+                                col1, col2 = st.columns([1, 3])
+                                with col1:
+                                    st.metric("Pain Level", f"{interview.pain_level}/10")
+                                    st.metric("WTP", f"{interview.willingness_to_pay}/10")
+                                with col2:
+                                    st.progress(interview.pain_level / 10)
+                                    st.caption(interview.transcript_summary[:200] + "...")
+                                st.divider()
+                        st.session_state.chat_history.append(f"**Interviews Completed:** {len(raw_interviews)} personas\n")
+                
+                # Handle Analyst Event
+                if "analyst" in event:
+                    state = event["analyst"]
+                    research_report = state.get("research_report")
+                    if research_report:
+                        st.markdown("### 📊 Analyst Report")
+                        st.warning(f"**🔄 Pivot Recommendation:**\n{research_report.pivot_recommendation}")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.markdown("**✅ Confirmed Hypotheses:**")
+                            for h in research_report.confirmed_hypotheses:
+                                st.markdown(f"- {h}")
+                        with col2:
+                            st.markdown("**❌ Rejected Hypotheses:**")
+                            for h in research_report.rejected_hypotheses:
+                                st.markdown(f"- {h}")
+                        
+                        st.markdown("**💡 Key Insights:**")
+                        for insight in research_report.key_insights:
+                            st.info(insight)
+                        
+                        st.session_state.chat_history.append(f"**Analyst Report:**\n{research_report.pivot_recommendation}\n")
+                
                 # --- HANDLE CRITIC OUTPUT ---
                 elif "critic" in event:
                     data = event["critic"]
