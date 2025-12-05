@@ -77,6 +77,7 @@ class GraphState(TypedDict):
     iteration_count: int
     messages: List[BaseMessage]  # Optional, but good for history
     max_iterations: int  # Add configurable max iterations
+    mode: Literal["full", "research_only"] # New field for mode selection
 
 # --- 3. Nodes & Logic ---
 
@@ -738,8 +739,26 @@ workflow.add_conditional_edges(
     }
 )
 
-# Compile the graph
+# Compile the Full Graph
 app = workflow.compile()
+
+# --- 5. Research Laboratory Workflow ---
+# A separate graph for the "Research Only" mode
+research_workflow = StateGraph(GraphState)
+
+# Add Nodes (Reuse existing nodes)
+research_workflow.add_node("researcher", researcher_node)
+research_workflow.add_node("simulation", simulation_node)
+research_workflow.add_node("analyst", analyst_node)
+
+# Define Topology
+research_workflow.set_entry_point("researcher")
+research_workflow.add_edge("researcher", "simulation")
+research_workflow.add_edge("simulation", "analyst")
+research_workflow.add_edge("analyst", END)
+
+# Compile Research Graph
+research_app = research_workflow.compile()
 
 # --- 5. Main Execution ---
 

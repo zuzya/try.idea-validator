@@ -31,8 +31,8 @@ llm_generator = ChatGoogleGenerativeAI(
 # CRITIC: ChatGPT 5.1 (Reasoning Heavy)
 # Features: Deep Reasoning (System 2), Simulation capabilities
 llm_critic = ChatOpenAI(
-    # model="gpt-5.1", 
-    model="gpt-5-mini", 
+    model="gpt-5.1", 
+    # model="gpt-5-mini", 
     temperature=0.1, # Keep it cold and logical
     reasoning_effort="high", # Enable deep thinking
     openai_api_key=os.getenv("OPENAI_API_KEY")
