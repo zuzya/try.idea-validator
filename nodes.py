@@ -3,7 +3,7 @@ import re
 import pathlib
 from langchain_core.messages import HumanMessage, SystemMessage
 from config import (
-    llm_generator, llm_critic, 
+    llm_generator, llm_critic, llm_fast,
     GENERATOR_SYSTEM_PROMPT, CRITIC_SYSTEM_PROMPT, 
     RESEARCHER_SYSTEM_PROMPT, SIMULATION_SYSTEM_PROMPT, 
     ANALYST_SYSTEM_PROMPT, MOCK_SIMULATION
@@ -115,6 +115,11 @@ def generator_node(state: GraphState) -> GraphState:
         HumanMessage(content=user_content)
     ]
 
+    # Select LLM based on mode
+    llm = llm_fast if state.get("use_fast_model") else llm_generator
+    if state.get("use_fast_model"):
+        print("   -> [DEBUG] Using FAST Model (Gemini Flash)")
+
     # --- RETRY & PARSE LOGIC ---
     new_idea = None
     last_error = None
@@ -123,7 +128,7 @@ def generator_node(state: GraphState) -> GraphState:
         try:
             print(f"   -> Invoking LLM (Attempt {attempt + 1})...")
             
-            response = llm_generator.invoke(messages)
+            response = llm.invoke(messages)
             raw_content = response.content
             
             # --- FIX: ОБРАБОТКА СПИСКА ---
@@ -198,6 +203,13 @@ def critic_node(state: GraphState) -> GraphState:
         SystemMessage(content=CRITIC_SYSTEM_PROMPT),
         HumanMessage(content=user_content)
     ]
+    
+    # Select LLM
+    llm = llm_fast if state.get("use_fast_model") else llm_critic
+    if state.get("use_fast_model"):
+        print("   -> [DEBUG] Using FAST Model (Gemini Flash) for Critique")
+        # Note: structured output might behave differently on Flash, but we try
+        structured_llm = llm.with_structured_output(CritiqueFeedback)
     
     try:
         feedback = structured_llm.invoke(messages)
@@ -283,6 +295,11 @@ def researcher_node(state: GraphState) -> GraphState:
         HumanMessage(content=user_content)
     ]
     
+    # Select LLM
+    llm = llm_fast if state.get("use_fast_model") else llm_generator
+    if state.get("use_fast_model"):
+        print("   -> [DEBUG] Using FAST Model (Gemini Flash) for Research")
+
     # 2. Invoke LLM
     # We use the same manual parsing logic as generator_node for stability with Gemini
     interview_guide = None
@@ -291,7 +308,7 @@ def researcher_node(state: GraphState) -> GraphState:
     for attempt in range(3):
         try:
             print(f"   -> Invoking Researcher (Attempt {attempt + 1})...")
-            response = llm_generator.invoke(messages)
+            response = llm.invoke(messages)
             raw_content = response.content
             
             if isinstance(raw_content, list):
@@ -437,7 +454,20 @@ def simulation_node(state: GraphState) -> GraphState:
         ВОПРОСЫ ИНТЕРВЬЮЕРА:
         {json.dumps(interview_guide.questions, ensure_ascii=False, indent=2)}
         
-        Сгенерируй диалог и meta-analysis JSON.
+        КРИТИЧЕСКИ ВАЖНО: Верни СТРОГО валидный JSON в таком формате:
+        {{
+          "persona": {{
+            "name": "{p.name}",
+            "role": "{p.role}",
+            "background": "краткое описание"
+          }},
+          "transcript_summary": "Краткая выжимка диалога (самые важные инсайты)",
+          "pain_level": 7,
+          "willingness_to_pay": 4
+        }}
+        
+        НЕ используй поля "transcript", "dialogue" или другие. ТОЛЬКО указанные выше поля.
+        Начинай ответ сразу с {{, без markdown блоков.
         """
         
         messages = [
@@ -445,9 +475,14 @@ def simulation_node(state: GraphState) -> GraphState:
             HumanMessage(content=user_content)
         ]
         
+        # Select LLM
+        llm = llm_fast if state.get("use_fast_model") else llm_critic
+        if state.get("use_fast_model"):
+            print("   -> [DEBUG] Using FAST Model (Gemini Flash) for Simulation")
+
         # Invoke LLM (GPT-5.1 / Critic Model)
         try:
-            response = llm_critic.invoke(messages)
+            response = llm.invoke(messages)
             raw_content = response.content
             
             cleaned_json_str = extract_json_from_text(raw_content)
@@ -539,10 +574,15 @@ def analyst_node(state: GraphState) -> GraphState:
         HumanMessage(content=user_content)
     ]
     
+    # Select LLM
+    llm = llm_fast if state.get("use_fast_model") else llm_generator
+    if state.get("use_fast_model"):
+        print("   -> [DEBUG] Using FAST Model (Gemini Flash) for Analysis")
+
     # 2. Invoke LLM (Gemini 3 Pro)
     research_report = None
     try:
-        response = llm_generator.invoke(messages)
+        response = llm.invoke(messages)
         raw_content = response.content
         
         if isinstance(raw_content, list):

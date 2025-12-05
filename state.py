@@ -21,3 +21,4 @@ class GraphState(TypedDict):
     # --- Configuration Flags ---
     enable_simulation: bool
     enable_critic: bool
+    use_fast_model: bool # Debug mode flag

@@ -46,6 +46,14 @@ llm_router = ChatGoogleGenerativeAI(
     google_api_key=os.getenv("GOOGLE_API_KEY")
 )
 
+# FAST MODEL: Gemini 2.5 Flash (For Debug Mode)
+llm_fast = ChatGoogleGenerativeAI(
+    model="gemini-2.5-flash",
+    temperature=0.7,
+    google_api_key=os.getenv("GOOGLE_API_KEY"),
+    safety_settings=safety_settings
+)
+
 GENERATOR_SYSTEM_PROMPT = """
 ### РОЛЬ И КОНТЕКСТ
 Ты — ведущий Продуктовый Стратег (CPO) с опытом запуска успешных продуктов в РФ (уровень Т-Банк, Яндекс, Avito).

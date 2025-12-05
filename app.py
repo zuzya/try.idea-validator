@@ -38,6 +38,9 @@ with st.sidebar:
     st.subheader("Validation Modes")
     enable_simulation = st.checkbox("Run Simulation (Research & Interviews)", value=True, help="Enable synthetic user interviews and analysis.")
     enable_critic = st.checkbox("Enable Investor Critic (Iterative Refinement)", value=True, help="Enable VC critique and iterative improvement loop.")
+    
+    st.divider()
+    use_fast_model = st.checkbox("⚡ Debug Mode (Fast Models)", value=False, help="Use Gemini 2.5 Flash for all agents. Much faster, but less smart.")
 
 user_input = st.text_area("Enter your startup idea:", height=100, placeholder="e.g., Uber for walking robotic dogs...")
 
@@ -56,7 +59,8 @@ if st.button("Start Validation Loop", type="primary"):
             "mode": "full",
             "messages": [],
             "enable_simulation": enable_simulation,
-            "enable_critic": enable_critic
+            "enable_critic": enable_critic,
+            "use_fast_model": use_fast_model
         }
         
         with st.status("🚀 Running Validation Loop...", expanded=True) as status:
