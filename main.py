@@ -78,6 +78,10 @@ class GraphState(TypedDict):
     messages: List[BaseMessage]  # Optional, but good for history
     max_iterations: int  # Add configurable max iterations
     mode: Literal["full", "research_only"] # New field for mode selection
+    
+    # --- Configuration Flags ---
+    enable_simulation: bool
+    enable_critic: bool
 
 # --- 3. Nodes & Logic ---
 
@@ -247,9 +251,13 @@ def generator_node(state: GraphState) -> GraphState:
 
     print(f"   -> Generated: {new_idea.title}")
 
+    # If we are iterating (critique exists), we should clear the previous research report and critique
+    # to allow for a fresh research cycle if enabled.
     return {
         "current_idea": new_idea,
-        "iteration_count": state["iteration_count"] + 1
+        "iteration_count": state["iteration_count"] + 1,
+        "research_report": None, # Clear for next cycle
+        "critique": None         # Clear for next cycle
     }
 
 def critic_node(state: GraphState) -> GraphState:
@@ -669,18 +677,26 @@ def analyst_node(state: GraphState) -> GraphState:
 def route_after_generator(state: GraphState) -> str:
     """
     Determines where to go after Generator.
-    If iteration_count == 0 AND research_report is None: go to researcher.
-    Else: go to critic.
+    Logic:
+    1. If Simulation Enabled AND No Research Report -> Researcher
+    2. If Critic Enabled -> Critic
+    3. Else -> END
     """
-    iteration = state["iteration_count"]
     research_report = state.get("research_report")
+    enable_simulation = state.get("enable_simulation", True) # Default True for backward compatibility
+    enable_critic = state.get("enable_critic", True)         # Default True
     
-    # After initial generation (iteration becomes 1), if no research done yet
-    if iteration == 1 and research_report is None:
+    # If Simulation is enabled, we MUST do research first (unless already done for this cycle)
+    # Note: generator_node clears research_report on new iteration, so this works for loops too.
+    if enable_simulation and research_report is None:
         return "researcher"
-    
-    # Otherwise go to critic
-    return "critic"
+        
+    # If we have research (or sim disabled), check if we want critique
+    if enable_critic:
+        return "critic"
+        
+    # If neither (Generation Only), stop
+    return "end"
 
 def route_after_analyst(state: GraphState) -> str:
     """
@@ -722,7 +738,8 @@ workflow.add_conditional_edges(
     route_after_generator,
     {
         "researcher": "researcher",
-        "critic": "critic"
+        "critic": "critic",
+        "end": END
     }
 )
 
@@ -741,24 +758,6 @@ workflow.add_conditional_edges(
 
 # Compile the Full Graph
 app = workflow.compile()
-
-# --- 5. Research Laboratory Workflow ---
-# A separate graph for the "Research Only" mode
-research_workflow = StateGraph(GraphState)
-
-# Add Nodes (Reuse existing nodes)
-research_workflow.add_node("researcher", researcher_node)
-research_workflow.add_node("simulation", simulation_node)
-research_workflow.add_node("analyst", analyst_node)
-
-# Define Topology
-research_workflow.set_entry_point("researcher")
-research_workflow.add_edge("researcher", "simulation")
-research_workflow.add_edge("simulation", "analyst")
-research_workflow.add_edge("analyst", END)
-
-# Compile Research Graph
-research_app = research_workflow.compile()
 
 # --- 5. Main Execution ---
 

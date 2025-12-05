@@ -1,7 +1,7 @@
 import streamlit as st
 import json
 # Import the compiled graph from main.py
-from main import app as graph_app, research_app, BusinessIdea
+from main import app as graph_app, BusinessIdea
 import time
 
 st.set_page_config(page_title="AI Idea Validator 2025", layout="wide", page_icon="🦄")
@@ -34,32 +34,32 @@ with st.sidebar:
         import os
         os.environ["MOCK_SIMULATION"] = "false"
 
+    st.divider()
+    st.subheader("Validation Modes")
+    enable_simulation = st.checkbox("Run Simulation (Research & Interviews)", value=True, help="Enable synthetic user interviews and analysis.")
+    enable_critic = st.checkbox("Enable Investor Critic (Iterative Refinement)", value=True, help="Enable VC critique and iterative improvement loop.")
+
 user_input = st.text_area("Enter your startup idea:", height=100, placeholder="e.g., Uber for walking robotic dogs...")
 
-# Create Tabs
-tab1, tab2 = st.tabs(["🚀 Full Cycle Validator", "🧪 Research Laboratory"])
-
-# --- TAB 1: FULL CYCLE VALIDATOR ---
-with tab1:
-    st.caption("Generate, Research, Simulate, Analyze, Pivot, and Critique - all in one loop.")
-    
-    if st.button("Start Validation Loop", type="primary"):
-        if not user_input:
-            st.warning("Please enter an idea first.")
-        else:
-            st.session_state.chat_history = []
-            st.session_state.chat_history.append(f"**Idea:** {user_input}\n")
-            
-            # Initialize State
-            initial_state = {
-                "initial_input": user_input,
-                "iteration_count": 0,
-                "max_iterations": max_iter,
-                "mode": "full",
-                "messages": []
-            }
-            
-            with st.status("🚀 Running Validation Loop...", expanded=True) as status:
+if st.button("Start Validation Loop", type="primary"):
+    if not user_input:
+        st.warning("Please enter an idea first.")
+    else:
+        st.session_state.chat_history = []
+        st.session_state.chat_history.append(f"**Idea:** {user_input}\n")
+        
+        # Initialize State
+        initial_state = {
+            "initial_input": user_input,
+            "iteration_count": 0,
+            "max_iterations": max_iter,
+            "mode": "full",
+            "messages": [],
+            "enable_simulation": enable_simulation,
+            "enable_critic": enable_critic
+        }
+        
+        with st.status("🚀 Running Validation Loop...", expanded=True) as status:
                 st.write("Initializing agents...")
                 
                 # Run the Graph
@@ -162,102 +162,6 @@ with tab1:
                             
                             st.session_state.chat_history.append(f"**Critique:** Score {critique.score}\n{critique.feedback}\n")
 
-# --- TAB 2: RESEARCH LABORATORY ---
-with tab2:
-    st.caption("Focus purely on Research: Hypotheses -> Interviews -> Analysis. No pivoting, no critique.")
-    
-    research_input = st.text_area("Describe the Problem or Hypothesis to validate:", height=100, placeholder="e.g., Accountants spend too much time on manual data entry...", key="research_input")
-    
-    if st.button("🧪 Start Research Lab", type="primary"):
-        if not research_input:
-            st.warning("Please describe the problem first.")
-        else:
-            st.session_state.chat_history = []
-            st.session_state.chat_history.append(f"**Research Task:** {research_input}\n")
-            
-            # Initialize State for Research Mode
-            dummy_idea = BusinessIdea(
-                title="Research Task",
-                description=research_input,
-                monetization_strategy="TBD",
-                target_audience="TBD"
-            )
-            
-            initial_state = {
-                "initial_input": research_input,
-                "current_idea": dummy_idea, # Inject dummy idea
-                "iteration_count": 0,
-                "max_iterations": 1, # Run once
-                "mode": "research_only",
-                "messages": []
-            }
-            
-            with st.status("🧪 Running Research Lab...", expanded=True) as status:
-                st.write("Initializing researcher...")
-                
-                # Run the Research Graph
-                for event in research_app.stream(initial_state):
-                    
-                    # Reuse the same visualization logic!
-                    # Handle Researcher Event
-                    if "researcher" in event:
-                        state = event["researcher"]
-                        interview_guide = state.get("interview_guide")
-                        if interview_guide:
-                            st.markdown("### 📋 Research Plan Created")
-                            with st.expander("View Hypotheses & Target Personas", expanded=True):
-                                st.markdown("**Target Personas for Interview:**")
-                                for p in interview_guide.target_personas:
-                                    with st.container():
-                                        st.markdown(f"**{p.name}** - {p.role}")
-                                        st.caption(f"*{p.archetype}:* {p.context}")
-                                        st.divider()
-                                
-                                st.markdown("**Hypotheses to Test:**")
-                                for h in interview_guide.hypotheses_to_test:
-                                    st.markdown(f"- **[{h.type}]** {h.description}")
-                            st.session_state.chat_history.append(f"**Research Plan:**\nPersonas: {len(interview_guide.target_personas)}\n")
-                    
-                    # Handle Simulation Event
-                    if "simulation" in event:
-                        state = event["simulation"]
-                        raw_interviews = state.get("raw_interviews", [])
-                        if raw_interviews:
-                            st.markdown(f"### 🗣️ User Interviews Simulated ({len(raw_interviews)})")
-                            cols = st.columns(len(raw_interviews))
-                            for idx, interview in enumerate(raw_interviews):
-                                with cols[idx % 3]:
-                                    with st.container(border=True):
-                                        st.markdown(f"**{interview.persona.name}**")
-                                        st.caption(f"{interview.persona.role}")
-                                        st.progress(interview.pain_level / 10, text=f"Pain: {interview.pain_level}/10")
-                                        st.progress(interview.willingness_to_pay / 10, text=f"WTP: {interview.willingness_to_pay}/10")
-                                        with st.popover("Transcript Summary"):
-                                            st.markdown(interview.transcript_summary)
-                            st.session_state.chat_history.append(f"**Interviews:** {len(raw_interviews)} conducted.\n")
-
-                    # Handle Analyst Event
-                    if "analyst" in event:
-                        state = event["analyst"]
-                        report = state.get("research_report")
-                        if report:
-                            st.markdown("### 📊 Analyst Report")
-                            st.success(f"**Pivot Recommendation:**\n{report.pivot_recommendation}")
-                            
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                st.markdown("✅ **Confirmed**")
-                                for h in report.confirmed_hypotheses:
-                                    st.markdown(f"- {h}")
-                            with col2:
-                                st.markdown("❌ **Rejected**")
-                                for h in report.rejected_hypotheses:
-                                    st.markdown(f"- {h}")
-                                    
-                            with st.expander("Key Insights"):
-                                for insight in report.key_insights:
-                                    st.markdown(f"💡 {insight}")
-                            st.session_state.chat_history.append(f"**Analyst Report:**\nRecommendation: {report.pivot_recommendation}\n")
 
 # --- EXPORT FUNCTIONALITY ---
 if st.session_state.get("chat_history"):
