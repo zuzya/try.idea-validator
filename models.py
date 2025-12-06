@@ -47,3 +47,11 @@ class ResearchReport(BaseModel):
     confirmed_hypotheses: List[str] = Field(description="Список подтвержденных гипотез")
     rejected_hypotheses: List[str] = Field(description="Список опровергнутых гипотез")
     pivot_recommendation: str = Field(description="Рекомендация для Продукта: что изменить в идее на основе данных (на русском)")
+
+class RichPersona(BaseModel):
+    """Represents a detailed persona selected for the interview (from Recruiter)."""
+    name: str = Field(description="A generated name for the persona")
+    role: str = Field(description="Role or profession of the persona")
+    background: str = Field(description="Key background details relevant to the startup idea")
+    attitude: str = Field(description="Attitude towards the idea (e.g., Enthusiastic, Skeptical, Critical)")
+    original_text: str = Field(description="The original raw text from the dataset")

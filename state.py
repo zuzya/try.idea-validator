@@ -10,6 +10,7 @@ class GraphState(TypedDict):
     interview_guide: Optional[InterviewGuide]  # Скрипт и гипотезы
     raw_interviews: List[InterviewResult]      # Результаты каждого "звонка"
     research_report: Optional[ResearchReport]  # Итоговый анализ
+    selected_personas: List[dict] = []         # Персоны от рекрутера (RichPersona objects as dicts)
     # -------------------------------------------
     
     critique: Optional[CritiqueFeedback]

@@ -5,7 +5,8 @@ import os
 from state import GraphState
 from nodes import (
     generator_node, researcher_node, 
-    simulation_node, analyst_node, critic_node
+    simulation_node, analyst_node, critic_node,
+    recruiter_node
 )
 from models import BusinessIdea
 
@@ -66,6 +67,7 @@ workflow = StateGraph(GraphState)
 
 workflow.add_node("generator", generator_node)
 workflow.add_node("researcher", researcher_node)
+workflow.add_node("recruiter", recruiter_node)
 workflow.add_node("simulation", simulation_node)
 workflow.add_node("analyst", analyst_node)
 workflow.add_node("critic", critic_node)
@@ -83,7 +85,8 @@ workflow.add_conditional_edges(
     }
 )
 
-workflow.add_edge("researcher", "simulation")
+workflow.add_edge("researcher", "recruiter")
+workflow.add_edge("recruiter", "simulation")
 workflow.add_edge("simulation", "analyst")
 workflow.add_edge("analyst", "generator") # Loop back for Pivot
 
