@@ -40,9 +40,26 @@ def route_after_generator(state: GraphState) -> str:
 
 def route_after_analyst(state: GraphState) -> str:
     """
-    After analyst, always go back to generator to apply research insights.
+    After analyst:
+    - If we haven't completed enough interview cycles, go back to generator for another cycle
+    - If we've completed the required interview_iterations, go to critic
     """
-    return "generator"
+    # Track completed interview cycles (each analyst run = 1 cycle complete)
+    current_interview_cycle = state.get("current_interview_cycle", 1)
+    interview_iterations = state.get("interview_iterations", 1)
+    enable_critic = state.get("enable_critic", True)
+    
+    print(f"   [ROUTE] Interview Cycle {current_interview_cycle}/{interview_iterations}")
+    
+    if current_interview_cycle < interview_iterations:
+        # Need more interview cycles - go back to generator
+        return "generator"
+    else:
+        # Done with interview cycles - go to critic if enabled
+        if enable_critic:
+            return "critic"
+        else:
+            return "generator"  # Continue without critic
 
 def should_continue(state: GraphState) -> str:
     """
@@ -140,7 +157,16 @@ workflow.add_conditional_edges(
 )
 
 workflow.add_edge("simulation", "analyst")
-workflow.add_edge("analyst", "generator") # Loop back for Pivot
+
+# Conditional edge after analyst: either loop for more interviews or go to critic
+workflow.add_conditional_edges(
+    "analyst",
+    route_after_analyst,
+    {
+        "generator": "researcher",  # More interview cycles -> restart from researcher
+        "critic": "critic"          # Done with interviews -> go to critic
+    }
+)
 
 workflow.add_conditional_edges(
     "critic",

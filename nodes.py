@@ -247,9 +247,8 @@ def critic_node(state: GraphState) -> GraphState:
         # --- SAVE ARTIFACT: CRITIQUE ---
         critique_content = f"# Critique: {current_idea.title}\n\n"
         critique_content += f"## Verdict: {'APPROVED' if feedback.is_approved else 'REJECTED'}\n"
-        critique_content += f"**Score:** {feedback.score}/100\n\n"
-        critique_content += f"## Feedback\n{feedback.feedback}\n\n"
-        critique_content += f"## Strategic Advice\n{feedback.strategic_advice}\n"
+        critique_content += f"**Score:** {feedback.score}/10\n\n"
+        critique_content += f"## Feedback\n{feedback.feedback}\n"
         
         save_artifact(current_idea.title, "critique.md", critique_content)
         # -------------------------------
@@ -599,19 +598,6 @@ def simulation_node(payload: dict) -> dict:
         
         # Log
         conversation_log += f"**Interviewer**: {next_question}\n"
-        
-        # UI Streaming (Try/Except embedded)
-        try:
-            import streamlit as st
-            # Inner Thought (Hidden/Expander)
-            with st.expander(f"💭 {p.name} is thinking... (Mood: {persona_thought.mood}, Patience: {persona_thought.patience})"):
-                st.markdown(f"**Inner Monologue:** {persona_thought.inner_monologue}")
-            
-            # Verbal Response
-            with st.chat_message("user", avatar="👤"):
-                st.write(f"**{p.name}:** {persona_thought.verbal_response}")
-        except Exception:
-            pass
 
         personas_response_text = persona_thought.verbal_response
         conversation_log += f"\n**{p.name}:** {personas_response_text} *(Mood: {persona_thought.mood})*\n> Inner: {persona_thought.inner_monologue}\n"
@@ -620,45 +606,33 @@ def simulation_node(payload: dict) -> dict:
         
         if persona_thought.patience < 10:
             conversation_log += "\n*(Respondent ended the interview due to low patience)*\n"
-            try:
-               import streamlit as st
-               st.error(f"{p.name} lost patience and left.")
-            except: pass
             break
 
         # 2. INTERVIEWER AGENT
         interviewer_prompt = f"""
         respondent_message: "{personas_response_text}"
-        respondent_mood: {persona_thought.mood}
+        conversation_so_far: {history[-4:]}
         """
         
         interviewer_messages = [
-            SystemMessage(content=INTERVIEWER_SYSTEM_PROMPT.format(interview_guide=interview_guide.model_dump_json(), history=history[-5:])),
+            SystemMessage(content=INTERVIEWER_SYSTEM_PROMPT.format(
+                interview_guide=str(interview_guide.questions),
+                history=str(history[-3:])
+            )),
             HumanMessage(content=interviewer_prompt)
         ]
         
         try:
-            interviewer_app = structured_interviewer.invoke(interviewer_messages)
-            next_question = interviewer_app.next_question
+            interviewer_thought = structured_interviewer.invoke(interviewer_messages)
+            next_question = interviewer_thought.next_question
             
-            # UI
-            try:
-                import streamlit as st
-                with st.chat_message("assistant", avatar="🤖"):
-                    st.write(f"**Interviewer:** {next_question}")
-            except Exception:
-                pass
-            
-            if interviewer_app.status == "WRAP_UP":
+            if interviewer_thought.status == "WRAP_UP":
                 print("      -> Interviewer decided to wrap up.")
                 conversation_log += "\n*(Interviewer wrapped up the session)*\n"
-                try:
-                   import streamlit as st
-                   st.info("Interviewer wrapped up the session.")
-                except: pass
                 break
         except Exception as e:
             print(f"      -> [Interviewer Error] {e}")
+            interviewer_thought = InterviewerThought(analysis="Error", next_question="Thank you", status="WRAP_UP")
             break
             
     # --- FINAL SUMMARY ---
@@ -698,6 +672,7 @@ def simulation_node(payload: dict) -> dict:
                 "background": p.context[:200]
             },
             "transcript_summary": data_dict.get("transcript_summary", "No summary received"),
+            "full_transcript": conversation_log,
             "pain_level": int(data_dict.get("pain_level", 0)),
             "willingness_to_pay": int(data_dict.get("willingness_to_pay", 0))
         }
@@ -818,8 +793,14 @@ def analyst_node(state: GraphState) -> GraphState:
         
     except Exception as e:
         print(f"   -> Analyst Error: {e}")
+    
+    # Increment interview cycle counter
+    current_cycle = state.get("current_interview_cycle", 0)
+    new_cycle = current_cycle + 1
+    print(f"   -> Interview Cycle: {current_cycle} -> {new_cycle}")
         
     return {
         "research_report": research_report,
-        "iteration_count": state["iteration_count"]
+        "iteration_count": state["iteration_count"],
+        "current_interview_cycle": new_cycle
     }

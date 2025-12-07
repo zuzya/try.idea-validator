@@ -29,3 +29,5 @@ class GraphState(TypedDict):
     enable_critic: bool
     use_fast_model: bool # Debug mode flag
     num_personas: int # Number of interviews to run (1-3)
+    interview_iterations: int # How many interview cycles before going to critic (default 1)
+    current_interview_cycle: int # Current cycle counter (starts at 0, incremented by analyst)

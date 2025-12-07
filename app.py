@@ -23,7 +23,8 @@ st.caption("Powered by Gemini 3.0 Pro (Visionary) & GPT-5.1 (Reasoning)")
 with st.sidebar:
     st.header("Configuration")
     max_iter = st.slider("Max Iterations", 1, 10, 5)
-    num_personas = st.slider("Number of Respondents", 1, 3, 3) # New Config
+    num_personas = st.slider("Number of Respondents", 1, 3, 3)
+    interview_iterations = st.slider("Interview Cycles", 1, 3, 1, help="How many times to run the interview loop before critic review")
     mock_simulation = st.checkbox("Mock User Interviews (faster testing)", value=False)
     st.info("System is ready. API connections secure.")
     
@@ -50,6 +51,7 @@ if st.button("Start Validation Loop", type="primary"):
         st.warning("Please enter an idea first.")
     else:
         st.session_state.chat_history = []
+        st.session_state.collected_interviews = []  # Clear previous interviews
         st.session_state.chat_history.append(f"**Idea:** {user_input}\n")
         
         # Initialize State
@@ -62,7 +64,9 @@ if st.button("Start Validation Loop", type="primary"):
             "enable_simulation": enable_simulation,
             "enable_critic": enable_critic,
             "use_fast_model": use_fast_model,
-            "num_personas": num_personas
+            "num_personas": num_personas,
+            "interview_iterations": interview_iterations,
+            "current_interview_cycle": 0
         }
         
         # === REAL-TIME RENDERING WITH PLACEHOLDERS ===
@@ -139,15 +143,28 @@ if st.button("Start Validation Loop", type="primary"):
                                         with col2:
                                             st.markdown(f"**😤 Frustrations:** {', '.join(p.get('key_frustrations', []))}")
                                             st.markdown(f"**💻 Tech:** {', '.join(p.get('tech_stack', []))}")
+                        
+                        # Initialize progress bar after recruiter completes
+                        with interviews_placeholder.container():
+                            st.markdown(f"### 🗣️ Interviews: 0/{num_personas}")
+                            st.progress(0.0, text=f"Starting interviews...")
                     
-                    # --- SIMULATION: Silent (parallel events cause crash) ---
+                    # --- SIMULATION: Progress bar + collect for transcript viewing ---
                     if "simulation" in event:
                         state = event["simulation"]
                         interviews = state.get("raw_interviews", [])
                         collected_interview_count += len(interviews)
-                        # Update interview count placeholder
+                        # Collect interviews for later transcript viewing
+                        if "collected_interviews" not in st.session_state:
+                            st.session_state.collected_interviews = []
+                        st.session_state.collected_interviews.extend(interviews)
+                        
+                        # Show progress bar
+                        total_personas = num_personas
+                        progress = collected_interview_count / total_personas
                         with interviews_placeholder.container():
-                            st.markdown(f"### 🗣️ Interviews: **{collected_interview_count}** completed")
+                            st.markdown(f"### 🗣️ Interviews: {collected_interview_count}/{total_personas}")
+                            st.progress(progress, text=f"Interviewing respondents...")
                     
                     # --- ANALYST: Real-time render ---
                     if "analyst" in event:
@@ -196,6 +213,29 @@ if st.button("Start Validation Loop", type="primary"):
             st.session_state.chat_history.append(f"**Idea (Iter {iteration}):** {idea.title}\n")
         if collected_interview_count > 0:
             st.session_state.chat_history.append(f"**Interviews:** {collected_interview_count} conducted.\n")
+
+# --- TRANSCRIPT VIEWING ---
+if st.session_state.get("collected_interviews"):
+    st.divider()
+    st.subheader("📜 Interview Transcripts")
+    st.caption("Click to expand and view detailed transcripts from simulated interviews")
+    
+    for i, interview in enumerate(st.session_state.collected_interviews, 1):
+        persona_name = interview.persona.name if hasattr(interview.persona, 'name') else f"Respondent {i}"
+        persona_role = interview.persona.role if hasattr(interview.persona, 'role') else "Unknown"
+        
+        with st.expander(f"👤 {persona_name} ({persona_role}) - Pain: {interview.pain_level}/10, WTP: {interview.willingness_to_pay}/10", expanded=False):
+            # Summary
+            st.markdown("### 📝 Summary")
+            st.info(interview.transcript_summary)
+            
+            # Full Transcript
+            st.markdown("### 💬 Full Transcript")
+            full_transcript = getattr(interview, 'full_transcript', '')
+            if full_transcript:
+                st.markdown(full_transcript)
+            else:
+                st.caption("Full transcript not available")
 
 
 # --- EXPORT FUNCTIONALITY ---
