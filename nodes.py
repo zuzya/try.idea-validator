@@ -122,7 +122,7 @@ def generator_node(state: GraphState) -> GraphState:
     # Select LLM based on mode
     llm = llm_fast if state.get("use_fast_model") else llm_generator
     if state.get("use_fast_model"):
-        print("   -> [DEBUG] Using FAST Model (Gemini Flash)")
+        print("   -> [DEBUG] Using FAST Model (GPT-4o-mini)")
 
     # --- RETRY & PARSE LOGIC ---
     new_idea = None
@@ -221,7 +221,7 @@ def critic_node(state: GraphState) -> GraphState:
     # Select LLM
     llm = llm_fast if state.get("use_fast_model") else llm_critic
     if state.get("use_fast_model"):
-        print("   -> [DEBUG] Using FAST Model (Gemini Flash) for Critique")
+        print("   -> [DEBUG] Using FAST Model (GPT-4o-mini) for Critique")
         # Note: structured output might behave differently on Flash, but we try
         structured_llm = llm.with_structured_output(CritiqueFeedback)
     
@@ -323,7 +323,7 @@ def researcher_node(state: GraphState) -> GraphState:
     # Select LLM
     llm = llm_fast if state.get("use_fast_model") else llm_generator
     if state.get("use_fast_model"):
-        print("   -> [DEBUG] Using FAST Model (Gemini Flash) for Research")
+        print("   -> [DEBUG] Using FAST Model (GPT-4o-mini) for Research")
 
     # 2. Invoke LLM
     # We use the same manual parsing logic as generator_node for stability with Gemini
@@ -341,6 +341,19 @@ def researcher_node(state: GraphState) -> GraphState:
                 
             cleaned_json_str = extract_json_from_text(raw_content)
             data_dict = json.loads(cleaned_json_str)
+            
+            # --- ROBUSTNESS FIX: Auto-fill missing fields for weaker models ---
+            if "target_personas" in data_dict:
+                for p in data_dict["target_personas"]:
+                    if "search_query_en" not in p or not p["search_query_en"]:
+                        # Fallback: Construct query from role and context
+                        role_en = p.get("role", "Professional") # Simple fallback
+                        p["search_query_en"] = f"A {role_en} looking for solutions."
+                        print(f"      -> [Patch] Auto-filled missing 'search_query_en' for {p.get('name', '?')}")
+                    
+                    if "name" not in p:
+                        p["name"] = p.get("role", "Generic Persona")
+                        
             interview_guide = InterviewGuide(**data_dict)
             break
         except Exception as e:
@@ -404,8 +417,9 @@ def recruiter_node(state: GraphState) -> GraphState:
             print(f"   -> [{i}/3] Hunting for: {spec.role} ({spec.archetype})")
             
             # A. Generate Query
-            # We construct a query that blends role, context and pain points to find nearest match
-            query = f"{spec.role} {spec.context} {spec.archetype}"
+            # We use the specific English search query provided by Researcher for better vector matching
+            query = spec.search_query_en
+            print(f"      -> Query: {query}")
             
             # B. Search
             found_text = ""
@@ -514,7 +528,8 @@ def simulation_node(state: GraphState) -> GraphState:
                 name=rich_p.name,
                 role=rich_p.role,
                 archetype=rich_p.psychotype,
-                context=full_context
+                context=full_context,
+                search_query_en="N/A (Derived from RichPersona)"
             )
             
             personas_to_interview.append(target_p)
@@ -608,13 +623,51 @@ def simulation_node(state: GraphState) -> GraphState:
             
             # Log to artifact
             conversation_log += f"**Interviewer**: {next_question}\n"
-            conversation_log += f"**{p.name} (Thought)**: *{persona_thought.inner_monologue}* (Mood: {persona_thought.mood})\n"
-            conversation_log += f"**{p.name} (Said)**: {persona_thought.verbal_response}\n\n"
+            # conversation_log += f"**{p.name} (Thought)**: *{persona_thought.inner_monologue}* (Mood: {persona_thought.mood})\n" # This was moved inside the try block
+            # conversation_log += f"**{p.name} (Said)**: {persona_thought.verbal_response}\n\n" # This was moved inside the try block
             
-            print(f"      [{turn+1}/{MAX_TURNS}] {p.name}: {persona_thought.verbal_response[:50]}... (Mood: {persona_thought.mood})")
+            # print(f"      [{turn+1}/{MAX_TURNS}] {p.name}: {persona_thought.verbal_response[:50]}... (Mood: {persona_thought.mood})") # This was moved inside the try block
+            try:
+                # Invoke Persona Agent
+                persona_thought = structured_persona.invoke(persona_messages)
+                
+                # --- UI STREAMING (Persona) ---
+                try:
+                    import streamlit as st
+                    # Inner Thought (Hidden/Expander)
+                    with st.expander(f"💭 {p.name} is thinking... (Mood: {persona_thought.mood}, Patience: {persona_thought.patience})"):
+                        st.markdown(f"**Inner Monologue:** {persona_thought.inner_monologue}")
+                    
+                    # Verbal Response
+                    with st.chat_message("user", avatar="👤"):
+                        st.write(f"**{p.name}:** {persona_thought.verbal_response}")
+                except ImportError:
+                    pass
+                # ------------------------------
+
+                # Log to transcript matches logic below
+                personas_response_text = persona_thought.verbal_response
+                conversation_log += f"\n**{p.name}:** {personas_response_text} *(Mood: {persona_thought.mood})*\n> Inner: {persona_thought.inner_monologue}\n"
+                history.append({"role": "respondent", "content": personas_response_text}) # Updated to match original history format
+
+                print(f"      [{turn+1}/{MAX_TURNS}] {p.name}: {persona_thought.verbal_response[:50]}... (Mood: {persona_thought.mood})")
+                
+                # Check patience
+                if persona_thought.patience < 10:
+                    conversation_log += "\n*(Respondent ended the interview due to low patience)*\n"
+                    # UI
+                    try:
+                       import streamlit as st
+                       st.error(f"{p.name} lost patience and left.")
+                    except: pass
+                    break
+
+            except Exception as e:
+                print(f"      -> Simulation Step Error: {e}")
+                break
             
-            # Check exit conditions
-            if patience < 10:
+            # Check exit conditions (original patience check, now using persona_thought.patience)
+            if persona_thought.patience < 10: # This check is now redundant due to the one inside the try block
                 print("      -> Persona lost patience. Ending.")
                 conversation_log += "\n*(Interview ended early due to low patience)*\n"
                 break
@@ -628,6 +681,15 @@ def simulation_node(state: GraphState) -> GraphState:
             Decide the next question based on the guide: {interview_guide.questions}
             """
             
+            # --- INTERVIEWER TURN ---
+            # 2. Generate Interviewer Question
+            # We use the 'interviewer_app' logic (LLM 2)
+            
+            interviewer_prompt = f"""
+            respondent_message: "{personas_response_text}"
+            respondent_mood: {persona_thought.mood}
+            """
+            
             interviewer_messages = [
                 SystemMessage(content=INTERVIEWER_SYSTEM_PROMPT.format(interview_guide=interview_guide.model_dump_json(), history=history[-5:])),
                 HumanMessage(content=interviewer_prompt)
@@ -637,9 +699,23 @@ def simulation_node(state: GraphState) -> GraphState:
                 interviewer_app = structured_interviewer.invoke(interviewer_messages)
                 next_question = interviewer_app.next_question
                 
+                # --- UI STREAMING ---
+                try:
+                    import streamlit as st
+                    with st.chat_message("assistant", avatar="🤖"):
+                        st.write(f"**Interviewer:** {next_question}")
+                except ImportError:
+                    pass
+                # --------------------
+                
                 if interviewer_app.status == "WRAP_UP":
                     print("      -> Interviewer decided to wrap up.")
                     conversation_log += "\n*(Interviewer wrapped up the session)*\n"
+                    # UI
+                    try:
+                       import streamlit as st
+                       st.info("Interviewer wrapped up the session.")
+                    except: pass
                     break
             except Exception as e:
                 print(f"      -> [Interviewer Error] {e}")
@@ -669,8 +745,13 @@ def simulation_node(state: GraphState) -> GraphState:
         """
         
         try:
-            # Re-use extract_json_from_text logic with Generator model for better reasoning
-            summary_response = llm_generator.invoke([HumanMessage(content=summary_prompt)])
+            print(f"      -> Generating summary for {p.name}...")
+            
+            # Select LLM for summary
+            summary_llm = llm_fast if state.get("use_fast_model") else llm_generator
+            
+            # Re-use extract_json_from_text logic with Generator/Fast model for better reasoning
+            summary_response = summary_llm.invoke([HumanMessage(content=summary_prompt)])
             
             raw_content = summary_response.content
             # Handle Gemini's list output
@@ -818,7 +899,7 @@ def analyst_node(state: GraphState) -> GraphState:
     # Select LLM
     llm = llm_fast if state.get("use_fast_model") else llm_generator
     if state.get("use_fast_model"):
-        print("   -> [DEBUG] Using FAST Model (Gemini Flash) for Analysis")
+        print("   -> [DEBUG] Using FAST Model (GPT-4o-mini) for Analysis")
 
     # 2. Invoke LLM (Gemini 3 Pro)
     research_report = None

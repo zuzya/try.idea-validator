@@ -39,6 +39,9 @@ class TargetPersona(BaseModel):
     archetype: str = Field(description="Психотип (например: 'Консерватор', 'Новатор', 'Хейтер')")
     context: str = Field(description="Контекст жизни/работы (например: 'Работает в 1С, ненавидит обновления, зп 80к')")
     name: str = Field(description="Русское имя (например: 'Татьяна Ивановна')")
+    search_query_en: str = Field(
+        description="Search query in ENGLISH. Narrative style bio. Example: 'A marketing manager struggling with ROI attribution.'"
+    )
 
 class InterviewGuide(BaseModel):
     target_personas: List[TargetPersona] = Field(description="Список из 3-х конкретных людей для интервью")

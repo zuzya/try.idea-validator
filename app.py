@@ -97,6 +97,27 @@ if st.button("Start Validation Loop", type="primary"):
                                     st.markdown(f"- **[{h.type}]** {h.description}")
                             st.session_state.chat_history.append(f"**Research Plan:**\nPersonas: {len(interview_guide.target_personas)}\n")
                     
+                    # Handle Recruiter Event
+                    if "recruiter" in event:
+                        state = event["recruiter"]
+                        selected_personas = state.get("selected_personas", [])
+                        if selected_personas:
+                             st.markdown("### 🕵️‍♂️ Recruiter: Profiles Found")
+                             with st.expander("View Enriched Profiles (Real Data)", expanded=True):
+                                 for p in selected_personas:
+                                     # p is a dict here because it was serialized in the state
+                                     st.markdown(f"#### {p.get('name', 'Unknown')} ({p.get('role', 'Unknown')})")
+                                     col1, col2 = st.columns(2)
+                                     with col1:
+                                         st.markdown(f"**Bio:** {p.get('bio', '')}")
+                                         st.markdown(f"**Context:** {p.get('company_context', '')}")
+                                     with col2:
+                                         st.markdown(f"**Frustrations:** {', '.join(p.get('key_frustrations', []))}")
+                                         st.markdown(f"**Tech Stack:** {', '.join(p.get('tech_stack', []))}")
+                                         st.markdown(f"**Hidden Constraints:** {p.get('hidden_constraints', '')}")
+                                     st.divider()
+                             st.session_state.chat_history.append(f"**Recruiter:** Found {len(selected_personas)} enriched profiles.\n")
+
                     # Handle Simulation Event
                     if "simulation" in event:
                         state = event["simulation"]
