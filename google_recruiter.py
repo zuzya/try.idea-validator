@@ -70,7 +70,8 @@ class GoogleRecruiter:
         """
         Searches for personas using vector similarity.
         """
-        logger.info(f"Embedding query: {startup_idea[:50]}...")
+        logger.info(f"--- [Recruiter] Search Query ---")
+        logger.info(f"Query: {startup_idea}")
         
         # Embed query
         result = genai.embed_content(
@@ -81,14 +82,18 @@ class GoogleRecruiter:
         query_embedding = np.array(result['embedding'])
         
         # Compute cosine similarity
-        # (Assuming embeddings are normalized? Usually yes from API, but dot product is safe for ranking)
         scores = np.dot(self.embeddings, query_embedding)
         
         # Get top K indices
         top_indices = np.argsort(scores)[-limit:][::-1]
         
         results = []
-        for idx in top_indices:
+        logger.info(f"--- [Recruiter] Search Results (Top {limit}) ---")
+        for rank, idx in enumerate(top_indices, 1):
+            score = scores[idx]
+            text = self.texts[idx]
+            snippet = text[:100].replace('\n', ' ')
+            logger.info(f"Rank {rank}: Score={score:.4f} | Text='{snippet}...'")
             results.append(self.texts[idx])
             
         logger.info(f"Found {len(results)} relevant personas.")

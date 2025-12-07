@@ -12,7 +12,21 @@ class BusinessIdea(BaseModel):
 class CritiqueFeedback(BaseModel):
     is_approved: bool = Field(description="True если оценка >= 8")
     feedback: str = Field(description="Подробная критика, риски и советы (на русском языке)")
+    feedback: str = Field(description="Подробная критика, риски и советы (на русском языке)")
     score: int = Field(description="Оценка от 1 до 10", ge=1, le=10)
+
+# --- Simulation Mechanics Models (Turn-by-Turn) ---
+
+class PersonaThought(BaseModel):
+    mood: Literal["Interested", "Annoyed", "Confused", "Skeptical"]
+    patience: int = Field(description="Остаток терпения от 0 до 100")
+    inner_monologue: str = Field(description="Честные мысли. Анализ вопроса на предмет 'чуши'. Решение, врать или нет.")
+    verbal_response: str = Field(description="То, что персона говорит вслух исследователю.")
+
+class InterviewerThought(BaseModel):
+    analysis: str = Field(description="Анализ последнего ответа: был ли он честным? Нужно ли копать глубже?")
+    next_question: str = Field(description="Вопрос к респонденту.")
+    status: Literal["CONTINUE", "WRAP_UP"] = Field(description="Завершать ли интервью.")
 
 # --- Synthetic CustDev Models ---
 

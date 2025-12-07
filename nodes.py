@@ -5,18 +5,19 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from config import (
     llm_generator, llm_critic, llm_fast,
     GENERATOR_SYSTEM_PROMPT, CRITIC_SYSTEM_PROMPT, 
-    RESEARCHER_SYSTEM_PROMPT, SIMULATION_SYSTEM_PROMPT, 
+    RESEARCHER_SYSTEM_PROMPT, INTERVIEWER_SYSTEM_PROMPT, PERSONA_SYSTEM_PROMPT,
     ANALYST_SYSTEM_PROMPT, MOCK_SIMULATION
 )
 from models import (
     BusinessIdea, CritiqueFeedback, InterviewGuide, 
-    InterviewResult, UserPersona, ResearchReport, RichPersona, TargetPersona
+    InterviewResult, UserPersona, ResearchReport, RichPersona, TargetPersona,
+    PersonaThought, InterviewerThought
 )
 from google_recruiter import GoogleRecruiter
 from google.api_core import retry
 import google.generativeai as genai
 from state import GraphState
-from utils import extract_json_from_text
+from utils import extract_json_from_text, save_artifact
 
 def generator_node(state: GraphState) -> GraphState:
     print(f"\n--- GENERATOR NODE (Iteration {state['iteration_count']}) ---")
@@ -171,6 +172,16 @@ def generator_node(state: GraphState) -> GraphState:
 
     print(f"   -> Generated: {new_idea.title}")
 
+    # --- SAVE ARTIFACT: LEAN CANVAS ---
+    lean_canvas_content = f"# Lean Canvas: {new_idea.title}\n\n"
+    lean_canvas_content += f"## Problem\nTBD\n\n" # We could expand this if the model returned more
+    lean_canvas_content += f"## Solution\n{new_idea.description}\n\n"
+    lean_canvas_content += f"## Target Audience\n{new_idea.target_audience}\n\n"
+    lean_canvas_content += f"## Monetization\n{new_idea.monetization_strategy}\n\n"
+    
+    save_artifact(new_idea.title, "lean_canvas.md", lean_canvas_content)
+    # ----------------------------------
+
     # If we are iterating (critique exists), we should clear the previous research report and critique
     # to allow for a fresh research cycle if enabled.
     return {
@@ -223,6 +234,17 @@ def critic_node(state: GraphState) -> GraphState:
         
         print(f"   -> Verdict: {feedback.is_approved} (Score: {feedback.score}/10)")
         print(f"   -> Key Feedback: {feedback.feedback[:100]}...") # Print preview
+        
+        # --- SAVE ARTIFACT: CRITIQUE ---
+        critique_content = f"# Critique: {current_idea.title}\n\n"
+        critique_content += f"## Verdict: {'APPROVED' if feedback.is_approved else 'REJECTED'}\n"
+        critique_content += f"**Score:** {feedback.score}/100\n\n"
+        critique_content += f"## Feedback\n{feedback.feedback}\n\n"
+        critique_content += f"## Strategic Advice\n{feedback.strategic_advice}\n"
+        
+        save_artifact(current_idea.title, "critique.md", critique_content)
+        # -------------------------------
+        
     except Exception as e:
         print(f"   -> ERROR in critic_node: {e}")
         # Return a default critique to prevent crash
@@ -333,43 +355,24 @@ def researcher_node(state: GraphState) -> GraphState:
     print(f"   -> Generated Guide with {len(interview_guide.target_personas)} personas and {len(interview_guide.hypotheses_to_test)} hypotheses")
 
     # 3. File Persistence
-    try:
-        # Sanitize title for folder name
-        safe_title = re.sub(r'[<>:"/\\|?*]', '', current_idea.title).strip().replace(' ', '_')
-        # Limit length just in case
-        safe_title = safe_title[:50]
+    md_content = f"# Interview Guide: {current_idea.title}\n\n"
+    
+    md_content += "## Target Personas\n\n"
+    for i, persona in enumerate(interview_guide.target_personas, 1):
+        md_content += f"### Persona {i}: {persona.name}\n"
+        md_content += f"- **Role:** {persona.role}\n"
+        md_content += f"- **Archetype:** {persona.archetype}\n"
+        md_content += f"- **Context:** {persona.context}\n\n"
+    
+    md_content += "## Hypotheses to Test\n"
+    for h in interview_guide.hypotheses_to_test:
+        md_content += f"- **[{h.type}]** {h.description}\n"
         
-        base_dir = pathlib.Path("experiments")
-        experiment_dir = base_dir / safe_title
-        experiment_dir.mkdir(parents=True, exist_ok=True)
+    md_content += "\n## Questions (The Mom Test)\n"
+    for i, q in enumerate(interview_guide.questions, 1):
+        md_content += f"{i}. {q}\n"
         
-        file_path = experiment_dir / "interview_guide.md"
-        
-        # Format Markdown with new structure
-        md_content = f"# Interview Guide: {current_idea.title}\n\n"
-        
-        md_content += "## Target Personas\n\n"
-        for i, persona in enumerate(interview_guide.target_personas, 1):
-            md_content += f"### Persona {i}: {persona.name}\n"
-            md_content += f"- **Role:** {persona.role}\n"
-            md_content += f"- **Archetype:** {persona.archetype}\n"
-            md_content += f"- **Context:** {persona.context}\n\n"
-        
-        md_content += "## Hypotheses to Test\n"
-        for h in interview_guide.hypotheses_to_test:
-            md_content += f"- **[{h.type}]** {h.description}\n"
-            
-        md_content += "\n## Questions (The Mom Test)\n"
-        for i, q in enumerate(interview_guide.questions, 1):
-            md_content += f"{i}. {q}\n"
-            
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(md_content)
-            
-        print(f"   -> Saved guide to: {file_path}")
-        
-    except Exception as e:
-        print(f"   -> File Save Error: {e}")
+    save_artifact(current_idea.title, "interview_guide.md", md_content)
 
     return {
         "interview_guide": interview_guide,
@@ -440,7 +443,7 @@ def recruiter_node(state: GraphState) -> GraphState:
             HumanMessage(content=selection_prompt)
         ]
         
-        print("   -> Selecting best candidates...")
+        print(f"   -> [Recruiter] Selecting best candidates form {len(raw_chunks)} chunks...")
         response = llm.invoke(messages)
         
         cleaned_json = extract_json_from_text(response.content)
@@ -448,9 +451,11 @@ def recruiter_node(state: GraphState) -> GraphState:
         
         selected_personas = [RichPersona(**p) for p in data_list]
         
-        print(f"   -> Selected {len(selected_personas)} personas from database.")
-        for p in selected_personas:
-            print(f"      - {p.name} ({p.role}) [{p.attitude}]")
+        print(f"   -> [Recruiter] Selected {len(selected_personas)} personas from database:")
+        for i, p in enumerate(selected_personas, 1):
+            print(f"      {i}. {p.name} ({p.role})")
+            print(f"         Attitude: {p.attitude}")
+            print(f"         Background: {p.background[:100]}...")
             
     except Exception as e:
         print(f"   -> Recruiter Error: {e}")
@@ -510,27 +515,26 @@ def simulation_node(state: GraphState) -> GraphState:
     
     print(f"   -> Found {len(personas_to_interview)} personas to interview")
     
+    # Loop & Simulate
     raw_interviews = []
-    
-    # Prepare File for Transcript
-    try:
-        safe_title = re.sub(r'[<>:"/\\|?*]', '', current_idea.title).strip().replace(' ', '_')[:50]
-        base_dir = pathlib.Path("experiments")
-        experiment_dir = base_dir / safe_title
-        experiment_dir.mkdir(parents=True, exist_ok=True)
-        transcript_path = experiment_dir / "interviews_transcript.md"
-        
-        # Clear previous file
-        with open(transcript_path, "w", encoding="utf-8") as f:
-            f.write(f"# User Interviews: {current_idea.title}\n\n")
-            
-    except Exception as e:
-        print(f"   -> File Setup Error: {e}")
-        transcript_path = None
 
     # Loop & Simulate
+    raw_interviews = []
+    full_transcript_logs = [] # Store (name, transcript_text)
+
+    # Prepare LLMs
+    # Interviewer: Use Fast model (Gemini Flash) or Generator (Pro)
+    interviewer_llm = llm_fast if state.get("use_fast_model") else llm_generator
+    structured_interviewer = interviewer_llm.with_structured_output(InterviewerThought)
+    
+    # Persona: Always use Fast model (Gemini Flash) for speed in loop
+    persona_llm = llm_fast 
+    structured_persona = persona_llm.with_structured_output(PersonaThought)
+
     for p in personas_to_interview:
-        print(f"   -> Simulating interview with {p.name}...")
+        print(f"   -> Simulating interview with {p.name} ({p.role})...")
+        
+        conversation_log = "" # For artifact
         
         # MOCK MODE CHECK
         if MOCK_SIMULATION:
@@ -542,96 +546,164 @@ def simulation_node(state: GraphState) -> GraphState:
                 willingness_to_pay=4
             )
             raw_interviews.append(result)
-            
-            # Still write to file
-            if transcript_path:
-                with open(transcript_path, "a", encoding="utf-8") as f:
-                    f.write(f"## Interview with {result.persona.name}\n")
-                    f.write(f"**Role:** {result.persona.role}\n")
-                    f.write(f"**Pain Level:** {result.pain_level}/10\n")
-                    f.write(f"**Willingness to Pay:** {result.willingness_to_pay}/10\n\n")
-                    f.write(f"### Transcript Summary\n{result.transcript_summary}\n\n")
-                    f.write("---\n\n")
+            full_transcript_logs.append((p.name, "Mock Transcript"))
             continue
         
-        # REAL LLM MODE
-        user_content = f"""
-        ТЫ ИГРАЕШЬ РОЛЬ:
-        Имя: {p.name}
-        Профессия: {p.role}
-        Психотип: {p.archetype}
-        Контекст: {p.context}
+        # --- TURN-BY-TURN LOOP ---
+        history = []
         
-        Твоя задача — пройти интервью по продукту.
-        Будь {p.archetype}. Опирайся на свой контекст: {p.context}
-        Отвечай честно. Если решение тебе не подходит — скажи об этом прямо.
-        Не пытайся угодить интервьюеру.
+        # Initial greeting / context
+        conversation_log += f"### Interview with {p.name}\n"
+        conversation_log += f"**Role**: {p.role} | **Archetype**: {p.archetype}\n"
+        conversation_log += f"**Context**: {p.context[:200]}...\n\n"
         
-        ВОПРОСЫ ИНТЕРВЬЮЕРА:
-        {json.dumps(interview_guide.questions, ensure_ascii=False, indent=2)}
+        MAX_TURNS = 10
+        patience = 100
         
-        КРИТИЧЕСКИ ВАЖНО: Верни СТРОГО валидный JSON в таком формате:
-        {{
-          "persona": {{
-            "name": "{p.name}",
-            "role": "{p.role}",
-            "background": "краткое описание"
-          }},
-          "transcript_summary": "Краткая выжимка диалога (самые важные инсайты)",
-          "pain_level": 7,
-          "willingness_to_pay": 4
-        }}
+        # Initial Question from Guide
+        next_question = interview_guide.questions[0]
         
-        НЕ используй поля "transcript", "dialogue" или другие. ТОЛЬКО указанные выше поля.
-        Начинай ответ сразу с {{, без markdown блоков.
+        for turn in range(MAX_TURNS):
+            # 1. PERSONA AGENT
+            # Formulate Persona Prompt
+            persona_prompt = f"""
+            CURRENT SITUATION:
+            Interviewer (AI) asked: "{next_question}"
+            
+            YOUR PATIENCE: {patience}/100
+            
+            DIALOGUE HISTORY:
+            {[h['content'] for h in history[-3:]]} 
+            """
+            
+            persona_messages = [
+                SystemMessage(content=PERSONA_SYSTEM_PROMPT.format(persona_context=p.context)),
+                HumanMessage(content=persona_prompt)
+            ]
+            
+            try:
+                persona_thought = structured_persona.invoke(persona_messages)
+            except Exception as e:
+                print(f"      -> [Persona Error] {e}")
+                persona_thought = PersonaThought(mood="Confused", patience=patience-10, inner_monologue="Error", verbal_response="Could you repeat that?")
+            
+            # Update state
+            patience = persona_thought.patience
+            history.append({"role": "interviewer", "content": next_question})
+            history.append({"role": "respondent", "content": persona_thought.verbal_response})
+            
+            # Log to artifact
+            conversation_log += f"**Interviewer**: {next_question}\n"
+            conversation_log += f"**{p.name} (Thought)**: *{persona_thought.inner_monologue}* (Mood: {persona_thought.mood})\n"
+            conversation_log += f"**{p.name} (Said)**: {persona_thought.verbal_response}\n\n"
+            
+            print(f"      [{turn+1}/{MAX_TURNS}] {p.name}: {persona_thought.verbal_response[:50]}... (Mood: {persona_thought.mood})")
+            
+            # Check exit conditions
+            if patience < 10:
+                print("      -> Persona lost patience. Ending.")
+                conversation_log += "\n*(Interview ended early due to low patience)*\n"
+                break
+                
+            # 2. INTERVIEWER AGENT
+            # Decide next move
+            interviewer_prompt = f"""
+            LAST RESPONSE: "{persona_thought.verbal_response}"
+            
+            Analyze the response. Is it honest? Do we need to dig deeper?
+            Decide the next question based on the guide: {interview_guide.questions}
+            """
+            
+            interviewer_messages = [
+                SystemMessage(content=INTERVIEWER_SYSTEM_PROMPT.format(interview_guide=interview_guide.model_dump_json(), history=history[-5:])),
+                HumanMessage(content=interviewer_prompt)
+            ]
+            
+            try:
+                interviewer_app = structured_interviewer.invoke(interviewer_messages)
+                next_question = interviewer_app.next_question
+                
+                if interviewer_app.status == "WRAP_UP":
+                    print("      -> Interviewer decided to wrap up.")
+                    conversation_log += "\n*(Interviewer wrapped up the session)*\n"
+                    break
+            except Exception as e:
+                print(f"      -> [Interviewer Error] {e}")
+                break
+                
+        # --- END LOOP ---
+        
+        # Store full log
+        full_transcript_logs.append((p.name, conversation_log))
+        
+        # 3. FINAL SUMMARY (Meta-Analysis)
+        # We ask the Analyst model to summarize this specific interview based on the FULL logs
+        summary_prompt = f"""
+        ANALYZE THIS INTERVIEW TRANSCRIPT:
+        {conversation_log}
+        
+        Based on the respondent's INNER THOUGHTS and verbal answers:
+        1. How much pain do they really feel? (1-10)
+        2. Would they actually pay? (1-10)
+        3. Summarize the key insights.
+        
+        Return STRICT JSON (InterviewResult schema).
         """
         
-        messages = [
-            SystemMessage(content=SIMULATION_SYSTEM_PROMPT),
-            HumanMessage(content=user_content)
-        ]
-        
-        # Select LLM
-        llm = llm_fast if state.get("use_fast_model") else llm_critic
-        if state.get("use_fast_model"):
-            print("   -> [DEBUG] Using FAST Model (Gemini Flash) for Simulation")
-
-        # Invoke LLM (GPT-5.1 / Critic Model)
         try:
-            response = llm.invoke(messages)
-            raw_content = response.content
+            # Re-use extract_json_from_text logic with Generator model for better reasoning
+            summary_response = llm_generator.invoke([HumanMessage(content=summary_prompt)])
             
-            cleaned_json_str = extract_json_from_text(raw_content)
-            data_dict = json.loads(cleaned_json_str)
+            raw_content = summary_response.content
+            # Handle Gemini's list output
+            if isinstance(raw_content, list):
+                raw_content = "".join([b.get("text", "") for b in raw_content if isinstance(b, dict)])
             
-            # Inject Name/Role into the result manually since LLM might generate random ones
+            cleaned_json = extract_json_from_text(raw_content)
+            data_dict = json.loads(cleaned_json)
+            
+            # Fix nested objects if any
             if "persona" not in data_dict:
-                data_dict["persona"] = {}
+                 data_dict["persona"] = {}
             data_dict["persona"]["name"] = p.name
             data_dict["persona"]["role"] = p.role
-            if "background" not in data_dict["persona"]:
-                 data_dict["persona"]["background"] = f"{p.archetype}: {p.context}"
+            data_dict["persona"]["background"] = p.context[:100]
 
             result = InterviewResult(**data_dict)
             raw_interviews.append(result)
             
-            # Append to Transcript File
-            if transcript_path:
-                with open(transcript_path, "a", encoding="utf-8") as f:
-                    f.write(f"## Interview with {result.persona.name}\n")
-                    f.write(f"**Role:** {result.persona.role}\n")
-                    f.write(f"**Pain Level:** {result.pain_level}/10\n")
-                    f.write(f"**Willingness to Pay:** {result.willingness_to_pay}\n\n")
-                    f.write(f"### Transcript Summary\n{result.transcript_summary}\n\n")
-                    # Note: We don't have the full raw dialogue text in the JSON model currently, 
-                    # only the summary. The prompt asks for "Transcript" in the text generation 
-                    # but the JSON schema only captures summary. 
-                    # Ideally, we should capture the full text too, but for now we follow the schema.
-                    f.write("---\n\n")
-                    
         except Exception as e:
-            print(f"   -> Simulation Error for {p.name}: {e}")
+            print(f"   -> Summary Error for {p.name}: {e}")
+
+    # --- SAVE ARTIFACT: TRANSCRIPTS ---
+    if raw_interviews:
+        # Build the final big markdown file
+        final_md = f"# User Interviews: {current_idea.title}\n\n"
+        
+        # We iterate through results, and find matching log
+        # Since order is preserved (raw_interviews and full_transcript_logs have same order/length usually)
+        # We will loop by index
+        for i, result in enumerate(raw_interviews):
+            final_md += f"## Interview Summary: {result.persona.name}\n"
+            final_md += f"**Role:** {result.persona.role}\n"
+            final_md += f"**Pain Level:** {result.pain_level}/10\n"
+            final_md += f"**Willingness to Pay:** {result.willingness_to_pay}/10\n\n"
+            final_md += f"### Summary\n{result.transcript_summary}\n\n"
             
+            # Find matching log
+            log_text = ""
+            if i < len(full_transcript_logs):
+                 # Verify name match just in case
+                 if full_transcript_logs[i][0] == result.persona.name:
+                     log_text = full_transcript_logs[i][1]
+            
+            final_md += f"### Full Transcript (Turn-by-Turn)\n"
+            final_md += f"{log_text}\n"
+            final_md += "---\n\n"
+            
+        save_artifact(current_idea.title, "interviews_transcript.md", final_md)
+    # ----------------------------------
+
     return {
         "raw_interviews": raw_interviews,
         "iteration_count": state["iteration_count"]
@@ -711,26 +783,19 @@ def analyst_node(state: GraphState) -> GraphState:
         print(f"   -> Pivot Recommendation: {research_report.pivot_recommendation[:100]}...")
         
         # 3. File Persistence
-        safe_title = re.sub(r'[<>:"/\\|?*]', '', current_idea.title).strip().replace(' ', '_')[:50]
-        base_dir = pathlib.Path("experiments")
-        experiment_dir = base_dir / safe_title
-        experiment_dir.mkdir(parents=True, exist_ok=True)
-        report_path = experiment_dir / "research_report.md"
+        md_content = f"# Research Report: {current_idea.title}\n\n"
+        md_content += "## ✅ Confirmed Hypotheses\n"
+        for h in research_report.confirmed_hypotheses:
+            md_content += f"- {h}\n"
+        md_content += "\n## ❌ Rejected Hypotheses\n"
+        for h in research_report.rejected_hypotheses:
+            md_content += f"- {h}\n"
+        md_content += "\n## 💡 Key Insights\n"
+        for h in research_report.key_insights:
+            md_content += f"- {h}\n"
+        md_content += f"\n## 🔄 Pivot Recommendation\n{research_report.pivot_recommendation}\n"
         
-        with open(report_path, "w", encoding="utf-8") as f:
-            f.write(f"# Research Report: {current_idea.title}\n\n")
-            f.write("## ✅ Confirmed Hypotheses\n")
-            for h in research_report.confirmed_hypotheses:
-                f.write(f"- {h}\n")
-            f.write("\n## ❌ Rejected Hypotheses\n")
-            for h in research_report.rejected_hypotheses:
-                f.write(f"- {h}\n")
-            f.write("\n## 💡 Key Insights\n")
-            for h in research_report.key_insights:
-                f.write(f"- {h}\n")
-            f.write(f"\n## 🔄 Pivot Recommendation\n{research_report.pivot_recommendation}\n")
-            
-        print(f"   -> Saved report to: {report_path}")
+        save_artifact(current_idea.title, "research_report.md", md_content)
         
     except Exception as e:
         print(f"   -> Analyst Error: {e}")
