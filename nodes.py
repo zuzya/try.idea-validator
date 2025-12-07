@@ -22,6 +22,15 @@ from utils import extract_json_from_text, save_artifact
 def generator_node(state: GraphState) -> GraphState:
     print(f"\n--- GENERATOR NODE (Iteration {state['iteration_count']}) ---")
     
+    # DEBUG
+    rr = state.get("research_report")
+    cr = state.get("critique")
+    print(f"   -> DEBUG State: Has Research? {rr is not None} | Has Critique? {cr is not None}")
+    if rr: print(f"      -> Research: {rr.pivot_recommendation[:50]}...")
+    
+    current_idea = state.get("current_idea")
+    
+    user_content = ""
     # ВАЖНО: Мы НЕ используем .with_structured_output, так как он нестабилен
     # Мы используем обычный invoke и парсим руками.
     
@@ -412,9 +421,13 @@ def recruiter_node(state: GraphState) -> GraphState:
         # Ensure we have a model for enrichment
         llm = llm_fast if state.get("use_fast_model") else llm_generator
         
+        # Limit the number of personas to interview based on user config
+        limit = state.get("num_personas", 3)
+        print(f"   -> Limiting selection to first {limit} personas (requested by user).")
+        
         # 2. Iterate Strategy
-        for i, spec in enumerate(target_personas_specs, 1):
-            print(f"   -> [{i}/3] Hunting for: {spec.role} ({spec.archetype})")
+        for i, spec in enumerate(target_personas_specs[:limit], 1):
+            print(f"   -> [{i}/{limit}] Hunting for: {spec.role} ({spec.archetype})")
             
             # A. Generate Query
             # We use the specific English search query provided by Researcher for better vector matching
@@ -481,367 +494,230 @@ def recruiter_node(state: GraphState) -> GraphState:
         "iteration_count": state["iteration_count"]
     }
 
-def simulation_node(state: GraphState) -> GraphState:
+def simulation_node(payload: dict) -> dict:
     """
-    Simulates 3 distinct user interviews based on the guide.
+    Simulates ONE user interview. 
+    Input payload: {"rich_persona": dict, "interview_guide": InterviewGuide, "current_idea": BusinessIdea, "use_fast_model": bool}
     """
-    print(f"\n--- SIMULATION NODE ---")
-    
-    interview_guide = state.get("interview_guide")
-    if not interview_guide:
-        print("   -> CRITICAL: No interview guide found.")
-        return state
-        
-    current_idea = state["current_idea"]
-    
-    # Get personas from Recruiter (priority) or Researcher (fallback)
-    selected_personas_dicts = state.get("selected_personas", [])
-    
-    personas_to_interview = []
-    
-    if selected_personas_dicts:
-        print(f"   -> Using {len(selected_personas_dicts)} personas from RECRUITER (Real Data)")
-        # Convert dicts back to objects for easier handling, or just use dicts
-        for p_dict in selected_personas_dicts:
-            # Map RichPersona to TargetPersona structure for simulation
-            # RichPersona: name, role, background, attitude, original_text
-            # TargetPersona: name, role, archetype, context
-            
-            # We enrich the context with the background and original text
-            rich_p = RichPersona(**p_dict)
-            
-            # Create a TargetPersona object for the simulation loop
-            # Mapping RichPersona -> TargetPersona
-            # Model 2.0: name, role, age, company_context, bio, psychotype, key_frustrations, tech_stack, hidden_constraints
-            
-            # Construct a rich context string
-            full_context = (
-                f"Bio: {rich_p.bio}\n"
-                f"Age: {rich_p.age}\n"
-                f"Company: {rich_p.company_context}\n"
-                f"Frustrations: {', '.join(rich_p.key_frustrations)}\n"
-                f"Tech Stack: {', '.join(rich_p.tech_stack)}\n"
-                f"Hidden Constraints: {rich_p.hidden_constraints}"
-            )
+    rich_p_dict = payload.get("rich_persona")
+    interview_guide = payload.get("interview_guide")
+    current_idea = payload.get("current_idea") # Optional, needed for context? Actually not used heavily inside loop.
+    use_fast_model = payload.get("use_fast_model", False)
 
-            target_p = TargetPersona(
-                name=rich_p.name,
-                role=rich_p.role,
-                archetype=rich_p.psychotype,
-                context=full_context,
-                search_query_en="N/A (Derived from RichPersona)"
-            )
-            
-            personas_to_interview.append(target_p)
-            
-    else:
-        print("   -> Using synthetic personas from RESEARCHER")
-        personas_to_interview = interview_guide.target_personas
+    if not rich_p_dict:
+        print("   -> CRITICAL: No rich persona in payload.")
+        return {}
 
-    if not personas_to_interview:
-        print("   -> CRITICAL: No personas to interview.")
-        return state
-    
-    print(f"   -> Found {len(personas_to_interview)} personas to interview")
-    
-    # Loop & Simulate
-    raw_interviews = []
+    # Map RichPersona -> TargetPersona
+    rich_p = RichPersona(**rich_p_dict)
+    print(f"\n--- SIMULATING: {rich_p.name} ({rich_p.role}) ---")
 
-    # Loop & Simulate
-    raw_interviews = []
-    full_transcript_logs = [] # Store (name, transcript_text)
+    full_context = (
+        f"Bio: {rich_p.bio}\n"
+        f"Age: {rich_p.age}\n"
+        f"Company: {rich_p.company_context}\n"
+        f"Frustrations: {', '.join(rich_p.key_frustrations)}\n"
+        f"Tech Stack: {', '.join(rich_p.tech_stack)}\n"
+        f"Hidden Constraints: {rich_p.hidden_constraints}"
+    )
+
+    p = TargetPersona(
+        name=rich_p.name,
+        role=rich_p.role,
+        archetype=rich_p.psychotype,
+        context=full_context,
+        search_query_en="N/A (Derived from RichPersona)"
+    )
 
     # Prepare LLMs
-    # Interviewer: Use Fast model (Gemini Flash) or Generator (Pro)
-    interviewer_llm = llm_fast if state.get("use_fast_model") else llm_generator
+    interviewer_llm = llm_fast if use_fast_model else llm_generator
     structured_interviewer = interviewer_llm.with_structured_output(InterviewerThought)
     
-    # Persona: Always use Fast model (Gemini Flash) for speed in loop
     persona_llm = llm_fast 
     structured_persona = persona_llm.with_structured_output(PersonaThought)
 
-    for p in personas_to_interview:
-        print(f"   -> Simulating interview with {p.name} ({p.role})...")
+    conversation_log = ""
+    raw_interviews = []
+    
+    # MOCK SIMULATION CHECK
+    if MOCK_SIMULATION:
+        print(f"   -> [MOCK MODE] Skipping real LLM call for {p.name}")
+        conversation_log = "### Interview (MOCK)\nMock transcript content..."
+        result = InterviewResult(
+            persona=UserPersona(name=p.name, role=p.role, background=f"{p.archetype}: {p.context}"),
+            transcript_summary=f"Пользователь {p.name} (Parallel Mock) говорит, что идея норм.",
+            pain_level=7,
+            willingness_to_pay=4
+        )
+        # Create Log Markup
+        transcript_markdown = f"## Interview Summary: {p.name}\n"
+        transcript_markdown += f"**Role:** {p.role}\n**Pain:** 7/10\n**WTP:** 4/10\n\n### Transcript\n{conversation_log}\n---\n\n"
         
-        conversation_log = "" # For artifact
-        
-        # MOCK MODE CHECK
-        if MOCK_SIMULATION:
-            print(f"   -> [MOCK MODE] Skipping real LLM call for {p.name}")
-            result = InterviewResult(
-                persona=UserPersona(name=p.name, role=p.role, background=f"{p.archetype}: {p.context}"),
-                transcript_summary=f"Пользователь {p.name} говорит, что идея интересная, но дорого. Хочет Telegram-бот вместо приложения.",
-                pain_level=7,
-                willingness_to_pay=4
-            )
-            raw_interviews.append(result)
-            full_transcript_logs.append((p.name, "Mock Transcript"))
-            continue
-        
-        # --- TURN-BY-TURN LOOP ---
-        history = []
-        
-        # Initial greeting / context
-        conversation_log += f"### Interview with {p.name}\n"
-        conversation_log += f"**Role**: {p.role} | **Archetype**: {p.archetype}\n"
-        conversation_log += f"**Context**: {p.context[:200]}...\n\n"
-        
-        MAX_TURNS = 10
-        patience = 100
-        
-        # Initial Question from Guide
-        next_question = interview_guide.questions[0]
-        
-        for turn in range(MAX_TURNS):
-            # 1. PERSONA AGENT
-            # Formulate Persona Prompt
-            persona_prompt = f"""
-            CURRENT SITUATION:
-            Interviewer (AI) asked: "{next_question}"
-            
-            YOUR PATIENCE: {patience}/100
-            
-            DIALOGUE HISTORY:
-            {[h['content'] for h in history[-3:]]} 
-            """
-            
-            persona_messages = [
-                SystemMessage(content=PERSONA_SYSTEM_PROMPT.format(persona_context=p.context)),
-                HumanMessage(content=persona_prompt)
-            ]
-            
-            try:
-                persona_thought = structured_persona.invoke(persona_messages)
-            except Exception as e:
-                print(f"      -> [Persona Error] {e}")
-                persona_thought = PersonaThought(mood="Confused", patience=patience-10, inner_monologue="Error", verbal_response="Could you repeat that?")
-            
-            # Update state
-            patience = persona_thought.patience
-            history.append({"role": "interviewer", "content": next_question})
-            history.append({"role": "respondent", "content": persona_thought.verbal_response})
-            
-            # Log to artifact
-            conversation_log += f"**Interviewer**: {next_question}\n"
-            # conversation_log += f"**{p.name} (Thought)**: *{persona_thought.inner_monologue}* (Mood: {persona_thought.mood})\n" # This was moved inside the try block
-            # conversation_log += f"**{p.name} (Said)**: {persona_thought.verbal_response}\n\n" # This was moved inside the try block
-            
-            # print(f"      [{turn+1}/{MAX_TURNS}] {p.name}: {persona_thought.verbal_response[:50]}... (Mood: {persona_thought.mood})") # This was moved inside the try block
-            try:
-                # Invoke Persona Agent
-                persona_thought = structured_persona.invoke(persona_messages)
-                
-                # --- UI STREAMING (Persona) ---
-                try:
-                    import streamlit as st
-                    # Inner Thought (Hidden/Expander)
-                    with st.expander(f"💭 {p.name} is thinking... (Mood: {persona_thought.mood}, Patience: {persona_thought.patience})"):
-                        st.markdown(f"**Inner Monologue:** {persona_thought.inner_monologue}")
-                    
-                    # Verbal Response
-                    with st.chat_message("user", avatar="👤"):
-                        st.write(f"**{p.name}:** {persona_thought.verbal_response}")
-                except ImportError:
-                    pass
-                # ------------------------------
+        return {
+            "raw_interviews": [result],
+            "interview_transcripts": [transcript_markdown]
+        }
 
-                # Log to transcript matches logic below
-                personas_response_text = persona_thought.verbal_response
-                conversation_log += f"\n**{p.name}:** {personas_response_text} *(Mood: {persona_thought.mood})*\n> Inner: {persona_thought.inner_monologue}\n"
-                history.append({"role": "respondent", "content": personas_response_text}) # Updated to match original history format
-
-                print(f"      [{turn+1}/{MAX_TURNS}] {p.name}: {persona_thought.verbal_response[:50]}... (Mood: {persona_thought.mood})")
-                
-                # Check patience
-                if persona_thought.patience < 10:
-                    conversation_log += "\n*(Respondent ended the interview due to low patience)*\n"
-                    # UI
-                    try:
-                       import streamlit as st
-                       st.error(f"{p.name} lost patience and left.")
-                    except: pass
-                    break
-
-            except Exception as e:
-                print(f"      -> Simulation Step Error: {e}")
-                break
-            
-            # Check exit conditions (original patience check, now using persona_thought.patience)
-            if persona_thought.patience < 10: # This check is now redundant due to the one inside the try block
-                print("      -> Persona lost patience. Ending.")
-                conversation_log += "\n*(Interview ended early due to low patience)*\n"
-                break
-                
-            # 2. INTERVIEWER AGENT
-            # Decide next move
-            interviewer_prompt = f"""
-            LAST RESPONSE: "{persona_thought.verbal_response}"
-            
-            Analyze the response. Is it honest? Do we need to dig deeper?
-            Decide the next question based on the guide: {interview_guide.questions}
-            """
-            
-            # --- INTERVIEWER TURN ---
-            # 2. Generate Interviewer Question
-            # We use the 'interviewer_app' logic (LLM 2)
-            
-            interviewer_prompt = f"""
-            respondent_message: "{personas_response_text}"
-            respondent_mood: {persona_thought.mood}
-            """
-            
-            interviewer_messages = [
-                SystemMessage(content=INTERVIEWER_SYSTEM_PROMPT.format(interview_guide=interview_guide.model_dump_json(), history=history[-5:])),
-                HumanMessage(content=interviewer_prompt)
-            ]
-            
-            try:
-                interviewer_app = structured_interviewer.invoke(interviewer_messages)
-                next_question = interviewer_app.next_question
-                
-                # --- UI STREAMING ---
-                try:
-                    import streamlit as st
-                    with st.chat_message("assistant", avatar="🤖"):
-                        st.write(f"**Interviewer:** {next_question}")
-                except ImportError:
-                    pass
-                # --------------------
-                
-                if interviewer_app.status == "WRAP_UP":
-                    print("      -> Interviewer decided to wrap up.")
-                    conversation_log += "\n*(Interviewer wrapped up the session)*\n"
-                    # UI
-                    try:
-                       import streamlit as st
-                       st.info("Interviewer wrapped up the session.")
-                    except: pass
-                    break
-            except Exception as e:
-                print(f"      -> [Interviewer Error] {e}")
-                break
-                
-        # --- END LOOP ---
+    # --- TURN-BY-TURN LOOP ---
+    history = []
+    
+    conversation_log += f"### Interview with {p.name}\n"
+    conversation_log += f"**Role**: {p.role} | **Archetype**: {p.archetype}\n"
+    conversation_log += f"**Context**: {p.context[:200]}...\n\n"
+    
+    MAX_TURNS = 10
+    patience = 100
+    next_question = interview_guide.questions[0]
+    
+    for turn in range(MAX_TURNS):
+        # 1. PERSONA AGENT
+        persona_prompt = f"""
+        CURRENT SITUATION:
+        Interviewer (AI) asked: "{next_question}"
         
-        # Store full log
-        full_transcript_logs.append((p.name, conversation_log))
+        YOUR PATIENCE: {patience}/100
         
-        # 3. FINAL SUMMARY (Meta-Analysis)
-        # We ask the Analyst model to summarize this specific interview based on the FULL logs
-        summary_prompt = f"""
-        ANALYZE THIS INTERVIEW TRANSCRIPT:
-        {conversation_log[:15000]} # Limit context to avoid overflow
-        
-        Based on the respondent's INNER THOUGHTS and verbal answers, fill this strict JSON:
-        
-        REQUIRED JSON STRUCTURE:
-        {{
-            "transcript_summary": "String: Key insights and summary of the conversation",
-            "pain_level": Int (1-10),
-            "willingness_to_pay": Int (1-10)
-        }}
-        
-        CRITICAL: Do not use keys like 'pain_score' or 'pay_score'. Use 'pain_level' and 'willingness_to_pay'.
+        DIALOGUE HISTORY:
+        {[h['content'] for h in history[-3:]]} 
         """
         
+        persona_messages = [
+            SystemMessage(content=PERSONA_SYSTEM_PROMPT.format(persona_context=p.context)),
+            HumanMessage(content=persona_prompt)
+        ]
+        
         try:
-            print(f"      -> Generating summary for {p.name}...")
-            
-            # Select LLM for summary
-            summary_llm = llm_fast if state.get("use_fast_model") else llm_generator
-            
-            # Re-use extract_json_from_text logic with Generator/Fast model for better reasoning
-            summary_response = summary_llm.invoke([HumanMessage(content=summary_prompt)])
-            
-            raw_content = summary_response.content
-            # Handle Gemini's list output
-            if isinstance(raw_content, list):
-                raw_content = "".join([b.get("text", "") for b in raw_content if isinstance(b, dict)])
-            
-            cleaned_json = extract_json_from_text(raw_content)
-            if not cleaned_json:
-                 raise ValueError("LLM returned empty JSON")
-                 
-            data_dict = json.loads(cleaned_json)
-            
-            # Fix nested objects if any
-            if "persona" in data_dict:
-                 # Flatten if model nested it despite instructions
-                 data_dict = data_dict["persona"]
-                 
-            # Validation fix: ensure keys exist
-            if "pain_level" not in data_dict and "pain_score" in data_dict:
-                 data_dict["pain_level"] = data_dict["pain_score"]
-            if "willingness_to_pay" not in data_dict and "pay_score" in data_dict:
-                 data_dict["willingness_to_pay"] = data_dict["pay_score"]
-
-            # Re-construct proper nested structure for Pydantic (InterviewResult has 'persona' field)
-            # We need to WRAP the summary INT0 InterviewResult, not flattening it.
-            # Wait, InterviewResult definition:
-            # class InterviewResult(BaseModel):
-            #     persona: UserPersona
-            #     transcript_summary: str
-            #     pain_level: int
-            #     willingness_to_pay: int
-            
-            # The LLM gives us the flat fields. We must add 'persona' manually.
-            
-            final_data = {
-                "persona": {
-                    "name": p.name,
-                    "role": p.role,
-                    "background": p.context[:200]
-                },
-                "transcript_summary": data_dict.get("transcript_summary", "No summary provided"),
-                "pain_level": int(data_dict.get("pain_level", 0)),
-                "willingness_to_pay": int(data_dict.get("willingness_to_pay", 0))
-            }
-
-            result = InterviewResult(**final_data)
-            raw_interviews.append(result)
-            
-            # Success!
-            
+            persona_thought = structured_persona.invoke(persona_messages)
         except Exception as e:
-            print(f"   -> CRITICAL SUMMARY ERROR for {p.name}: {e}")
-            print("   -> INTERRUPTING SIMULATION due to file saving/processing risk.")
-            # Break the loop to stop wasting money and notify user
-            # We also ensure we save what we have so far?
+            print(f"      -> [Persona Error] {e}")
+            persona_thought = PersonaThought(mood="Confused", patience=patience-10, inner_monologue="Error", verbal_response="Could you repeat that?")
+        
+        # Update state
+        patience = persona_thought.patience
+        history.append({"role": "interviewer", "content": next_question})
+        history.append({"role": "respondent", "content": persona_thought.verbal_response})
+        
+        # Log
+        conversation_log += f"**Interviewer**: {next_question}\n"
+        
+        # UI Streaming (Try/Except embedded)
+        try:
+            import streamlit as st
+            # Inner Thought (Hidden/Expander)
+            with st.expander(f"💭 {p.name} is thinking... (Mood: {persona_thought.mood}, Patience: {persona_thought.patience})"):
+                st.markdown(f"**Inner Monologue:** {persona_thought.inner_monologue}")
+            
+            # Verbal Response
+            with st.chat_message("user", avatar="👤"):
+                st.write(f"**{p.name}:** {persona_thought.verbal_response}")
+        except Exception:
+            pass
+
+        personas_response_text = persona_thought.verbal_response
+        conversation_log += f"\n**{p.name}:** {personas_response_text} *(Mood: {persona_thought.mood})*\n> Inner: {persona_thought.inner_monologue}\n"
+
+        print(f"      [{turn+1}/{MAX_TURNS}] {p.name}: {persona_thought.verbal_response[:50]}...")
+        
+        if persona_thought.patience < 10:
+            conversation_log += "\n*(Respondent ended the interview due to low patience)*\n"
+            try:
+               import streamlit as st
+               st.error(f"{p.name} lost patience and left.")
+            except: pass
             break
 
-    # --- SAVE ARTIFACT: TRANSCRIPTS ---
-    if raw_interviews:
-        # Build the final big markdown file
-        final_md = f"# User Interviews: {current_idea.title}\n\n"
+        # 2. INTERVIEWER AGENT
+        interviewer_prompt = f"""
+        respondent_message: "{personas_response_text}"
+        respondent_mood: {persona_thought.mood}
+        """
         
-        # We iterate through results, and find matching log
-        # Since order is preserved (raw_interviews and full_transcript_logs have same order/length usually)
-        # We will loop by index
-        for i, result in enumerate(raw_interviews):
-            final_md += f"## Interview Summary: {result.persona.name}\n"
-            final_md += f"**Role:** {result.persona.role}\n"
-            final_md += f"**Pain Level:** {result.pain_level}/10\n"
-            final_md += f"**Willingness to Pay:** {result.willingness_to_pay}/10\n\n"
-            final_md += f"### Summary\n{result.transcript_summary}\n\n"
+        interviewer_messages = [
+            SystemMessage(content=INTERVIEWER_SYSTEM_PROMPT.format(interview_guide=interview_guide.model_dump_json(), history=history[-5:])),
+            HumanMessage(content=interviewer_prompt)
+        ]
+        
+        try:
+            interviewer_app = structured_interviewer.invoke(interviewer_messages)
+            next_question = interviewer_app.next_question
             
-            # Find matching log
-            log_text = ""
-            if i < len(full_transcript_logs):
-                 # Verify name match just in case
-                 if full_transcript_logs[i][0] == result.persona.name:
-                     log_text = full_transcript_logs[i][1]
+            # UI
+            try:
+                import streamlit as st
+                with st.chat_message("assistant", avatar="🤖"):
+                    st.write(f"**Interviewer:** {next_question}")
+            except Exception:
+                pass
             
-            final_md += f"### Full Transcript (Turn-by-Turn)\n"
-            final_md += f"{log_text}\n"
-            final_md += "---\n\n"
+            if interviewer_app.status == "WRAP_UP":
+                print("      -> Interviewer decided to wrap up.")
+                conversation_log += "\n*(Interviewer wrapped up the session)*\n"
+                try:
+                   import streamlit as st
+                   st.info("Interviewer wrapped up the session.")
+                except: pass
+                break
+        except Exception as e:
+            print(f"      -> [Interviewer Error] {e}")
+            break
             
-        save_artifact(current_idea.title, "interviews_transcript.md", final_md)
-    # ----------------------------------
+    # --- FINAL SUMMARY ---
+    summary_prompt = f"""
+    ANALYZE THIS INTERVIEW TRANSCRIPT:
+    {conversation_log[:15000]}
+    
+    Based on the respondent's INNER THOUGHTS and verbal answers, fill this strict JSON:
+    REQUIRED JSON STRUCTURE:
+    {{
+        "transcript_summary": "String: Key insights and summary of the conversation",
+        "pain_level": Int (1-10),
+        "willingness_to_pay": Int (1-10)
+    }}
+    Do not use keys like 'pain_score'. Use 'pain_level'.
+    """
+    
+    try:
+        print(f"      -> Generating summary for {p.name}...")
+        summary_llm = llm_fast if use_fast_model else llm_generator
+        summary_response = summary_llm.invoke([HumanMessage(content=summary_prompt)])
+        raw_content = summary_response.content
+        if isinstance(raw_content, list):
+            raw_content = "".join([b.get("text", "") for b in raw_content if isinstance(b, dict)])
+        
+        cleaned_json = extract_json_from_text(raw_content)
+        data_dict = json.loads(cleaned_json)
+        
+        # Patches
+        if "pain_level" not in data_dict and "pain_score" in data_dict: data_dict["pain_level"] = data_dict["pain_score"]
+        if "willingness_to_pay" not in data_dict and "pay_score" in data_dict: data_dict["willingness_to_pay"] = data_dict["pay_score"]
 
-    return {
-        "raw_interviews": raw_interviews,
-        "iteration_count": state["iteration_count"]
-    }
+        final_data = {
+            "persona": {
+                "name": p.name,
+                "role": p.role,
+                "background": p.context[:200]
+            },
+            "transcript_summary": data_dict.get("transcript_summary", "No summary received"),
+            "pain_level": int(data_dict.get("pain_level", 0)),
+            "willingness_to_pay": int(data_dict.get("willingness_to_pay", 0))
+        }
+        
+        result = InterviewResult(**final_data)
+        
+        # Prepare Markdown Transcript Chunk
+        transcript_markdown = f"## Interview Summary: {p.name}\n"
+        transcript_markdown += f"**Role:** {p.role}\n**Pain:** {result.pain_level}/10\n**WTP:** {result.willingness_to_pay}/10\n\n"
+        transcript_markdown += f"### Summary\n{result.transcript_summary}\n\n"
+        transcript_markdown += f"### Full Transcript\n{conversation_log}\n---\n\n"
+        
+        return {
+            "raw_interviews": [result],
+            "interview_transcripts": [transcript_markdown]
+        }
+        
+    except Exception as e:
+        print(f"   -> CRITICAL SUMMARY ERROR for {p.name}: {e}")
+        return {}
 
 def analyst_node(state: GraphState) -> GraphState:
     """
@@ -930,6 +806,15 @@ def analyst_node(state: GraphState) -> GraphState:
         md_content += f"\n## 🔄 Pivot Recommendation\n{research_report.pivot_recommendation}\n"
         
         save_artifact(current_idea.title, "research_report.md", md_content)
+        
+        # 4. Save Aggregated Transcripts (from Parallel Simulations)
+        interview_transcripts = state.get("interview_transcripts", [])
+        if interview_transcripts:
+            final_transcript_md = f"# User Interviews: {current_idea.title}\n\n"
+            for chunk in interview_transcripts:
+                final_transcript_md += chunk
+            save_artifact(current_idea.title, "interviews_transcript.md", final_transcript_md)
+            print("   -> Saved aggregated transcripts.")
         
     except Exception as e:
         print(f"   -> Analyst Error: {e}")

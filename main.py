@@ -85,8 +85,60 @@ workflow.add_conditional_edges(
     }
 )
 
+from langgraph.constants import Send
+
+def map_personas_to_interviews(state: GraphState):
+    """
+    Map-step: Generates parallel simulation tasks for each persona.
+    """
+    print("   -> [MAP] Distributing parallel simulations...")
+    personas = state.get('selected_personas', [])
+    
+    # If no personas (fallback to researcher default?) - handled in nodes logic or here.
+    # If empty, we might skip to generator or error out. 
+    # For now assume at least one exists (or simulation_node handles it? No, if list empty map returns empty)
+    if not personas and state.get("interview_guide"):
+         print("   -> [MAP] 'selected_personas' empty. Falling back to RESEARCHER target personas.")
+         guide_personas = state["interview_guide"].target_personas
+         # Convert TargetPersona (Pydantic) to dicts compatible with RichPersona structure (roughly)
+         # RichPersona expects: name, role, company_context, bio, key_frustrations, tech_stack, hidden_constraints, age, psychotype, original_text
+         # We'll fake it.
+         personas = []
+         for gp in guide_personas:
+             personas.append({
+                 "name": gp.name,
+                 "role": gp.role,
+                 "company_context": gp.context,
+                 "bio": f"{gp.archetype} working in context: {gp.context}",
+                 "key_frustrations": ["Unknown"],
+                 "tech_stack": ["Unknown"],
+                 "hidden_constraints": "None",
+                 "age": "30-40",
+                 "psychotype": gp.archetype,
+                 "original_text": "Synthetic fallback"
+             })
+
+    return [
+        Send("simulation", {
+            "rich_persona": p,
+            "interview_guide": state["interview_guide"],
+            "current_idea": state["current_idea"],
+            "use_fast_model": state.get("use_fast_model", False)
+        }) for p in personas
+    ]
+
+# ...
+
 workflow.add_edge("researcher", "recruiter")
-workflow.add_edge("recruiter", "simulation")
+
+# Replace linear edge with Conditional/Map edge
+# workflow.add_edge("recruiter", "simulation") 
+workflow.add_conditional_edges(
+    "recruiter",
+    map_personas_to_interviews,
+    path_map=["simulation"] 
+)
+
 workflow.add_edge("simulation", "analyst")
 workflow.add_edge("analyst", "generator") # Loop back for Pivot
 

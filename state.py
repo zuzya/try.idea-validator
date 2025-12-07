@@ -1,4 +1,5 @@
-from typing import TypedDict, List, Optional, Literal
+from typing import TypedDict, List, Optional, Literal, Annotated
+import operator
 from langchain_core.messages import BaseMessage
 from models import BusinessIdea, InterviewGuide, InterviewResult, ResearchReport, CritiqueFeedback
 
@@ -8,9 +9,13 @@ class GraphState(TypedDict):
     
     # --- Research Fields (Synthetic CustDev) ---
     interview_guide: Optional[InterviewGuide]  # Скрипт и гипотезы
-    raw_interviews: List[InterviewResult]      # Результаты каждого "звонка"
-    research_report: Optional[ResearchReport]  # Итоговый анализ
+    
+    # Reducible fields for Parallel Execution (Map-Reduce)
+    raw_interviews: Annotated[List[InterviewResult], operator.add]      # Результаты каждого "звонка"
+    interview_transcripts: Annotated[List[str], operator.add]           # Полные логи диалогов (Markdown chunks) for artifact generation
+    
     selected_personas: List[dict] = []         # Персоны от рекрутера (RichPersona objects as dicts)
+    research_report: Optional[ResearchReport]  # Analyst output
     # -------------------------------------------
     
     critique: Optional[CritiqueFeedback]
@@ -23,3 +28,4 @@ class GraphState(TypedDict):
     enable_simulation: bool
     enable_critic: bool
     use_fast_model: bool # Debug mode flag
+    num_personas: int # Number of interviews to run (1-3)
