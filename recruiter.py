@@ -140,7 +140,7 @@ class Recruiter:
         # We use a model capable of handling the file.
         
         model = genai.GenerativeModel(
-            model_name='gemini-1.5-flash', # Or 2.5 if available/requested, user said 2.5 for the parsing node.
+            model_name='gemini-2.5-flash', # Or 2.5 if available/requested, user said 2.5 for the parsing node.
             # We can use 1.5 Flash for retrieval as it's fast and cheap.
         )
         
@@ -198,7 +198,7 @@ def recruiter_node(state: RecruiterState, api_key: str) -> RecruiterState:
     # Actually, let's use 'gemini-1.5-flash' and comment about version.
     
     parsing_model = genai.GenerativeModel(
-        model_name='gemini-1.5-flash', 
+        model_name='gemini-2.5-flash', 
         generation_config={
             "response_mime_type": "application/json",
             "response_schema": list[RichPersona]

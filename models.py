@@ -63,9 +63,12 @@ class ResearchReport(BaseModel):
     pivot_recommendation: str = Field(description="Рекомендация для Продукта: что изменить в идее на основе данных (на русском)")
 
 class RichPersona(BaseModel):
-    """Represents a detailed persona selected for the interview (from Recruiter)."""
-    name: str = Field(description="A generated name for the persona")
-    role: str = Field(description="Role or profession of the persona")
-    background: str = Field(description="Key background details relevant to the startup idea")
-    attitude: str = Field(description="Attitude towards the idea (e.g., Enthusiastic, Skeptical, Critical)")
-    original_text: str = Field(description="The original raw text from the dataset")
+    name: str = Field(description="Реалистичное имя и фамилия")
+    role: str = Field(description="Точная должность")
+    age: int = Field(description="Возраст")
+    company_context: str = Field(description="Где работает: стартап, энтерпрайз, фриланс")
+    bio: str = Field(description="Краткая биография, профессиональный бэкграунд")
+    psychotype: str = Field(description="Психотип: Скептик, Новатор, Консерватор и т.д.")
+    key_frustrations: List[str] = Field(description="Список реальных рабочих болей")
+    tech_stack: List[str] = Field(description="Конкретный софт, который использует (Jira, 1C, Excel)")
+    hidden_constraints: str = Field(description="Скрытые мотивы: нет бюджета, боится увольнения, лень")

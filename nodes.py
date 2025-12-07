@@ -6,7 +6,7 @@ from config import (
     llm_generator, llm_critic, llm_fast,
     GENERATOR_SYSTEM_PROMPT, CRITIC_SYSTEM_PROMPT, 
     RESEARCHER_SYSTEM_PROMPT, INTERVIEWER_SYSTEM_PROMPT, PERSONA_SYSTEM_PROMPT,
-    ANALYST_SYSTEM_PROMPT, MOCK_SIMULATION
+    ANALYST_SYSTEM_PROMPT, MOCK_SIMULATION, RECRUITER_ENRICHMENT_PROMPT
 )
 from models import (
     BusinessIdea, CritiqueFeedback, InterviewGuide, 
@@ -381,88 +381,89 @@ def researcher_node(state: GraphState) -> GraphState:
 
 def recruiter_node(state: GraphState) -> GraphState:
     """
-    Finds relevant personas using Google Vector Search and selects the best ones.
+    Finds relevant personas using Google Vector Search (Role-based) and "enriches" them.
     """
-    print(f"\n--- RECRUITER NODE ---")
+    print(f"\n--- RECRUITER NODE (Enrichment Mode) ---")
     
-    current_idea = state["current_idea"]
-    startup_idea = f"{current_idea.title}: {current_idea.description}"
-    
-    selected_personas = []
+    interview_guide = state.get("interview_guide")
+    if not interview_guide:
+        print("   -> WARNING: No interview guide found. Skipping recruiter.")
+        return state
+        
+    target_personas_specs = interview_guide.target_personas
+    rich_personas_list = []
     
     try:
         # 1. Initialize Recruiter
         recruiter = GoogleRecruiter()
-        
-        # 2. Search
-        print(f"   -> Searching for personas relevant to: {current_idea.title}...")
-        raw_chunks = recruiter.search_personas(startup_idea, limit=10)
-        
-        if not raw_chunks:
-            print("   -> WARNING: No personas found via Recruiter. Will fall back to synthetic personas.")
-            return state
-            
-        context_text = "\n\n".join([f"Persona {i+1}:\n{chunk}" for i, chunk in enumerate(raw_chunks)])
-        
-        # 3. Parse and Select with Gemini
-        # We use the fast model or generator model
+        # Ensure we have a model for enrichment
         llm = llm_fast if state.get("use_fast_model") else llm_generator
         
-        # Use structured output if possible, or manual parsing
-        # Manual parsing is safer with Gemini sometimes
-        
-        selection_prompt = f"""
-        Here is the description of a startup idea: "{startup_idea}"
-        
-        Here are {len(raw_chunks)} potential candidate profiles found in our database:
-        
-        {context_text}
-        
-        Your Task:
-        1. Analyze these profiles.
-        2. Select exactly 3 BEST target users (most likely to buy/use) and 1 TOUGH CRITIC (skeptical/challenging).
-        3. Extract their details and format them into the required JSON structure.
-        4. For the 'attitude' field, label the critic as 'Critical' or 'Skeptical'.
-        5. For 'original_text', include the relevant excerpt from the source.
-        
-        CRITICAL: Return ONLY a valid JSON list of objects.
-        Format:
-        [
-          {{
-            "name": "Name",
-            "role": "Role",
-            "background": "Background details",
-            "attitude": "Enthusiastic/Critical",
-            "original_text": "Original text snippet"
-          }}
-        ]
-        """
-        
-        messages = [
-            SystemMessage(content="You are an expert Recruiter."),
-            HumanMessage(content=selection_prompt)
-        ]
-        
-        print(f"   -> [Recruiter] Selecting best candidates form {len(raw_chunks)} chunks...")
-        response = llm.invoke(messages)
-        
-        cleaned_json = extract_json_from_text(response.content)
-        data_list = json.loads(cleaned_json)
-        
-        selected_personas = [RichPersona(**p) for p in data_list]
-        
-        print(f"   -> [Recruiter] Selected {len(selected_personas)} personas from database:")
-        for i, p in enumerate(selected_personas, 1):
-            print(f"      {i}. {p.name} ({p.role})")
-            print(f"         Attitude: {p.attitude}")
-            print(f"         Background: {p.background[:100]}...")
+        # 2. Iterate Strategy
+        for i, spec in enumerate(target_personas_specs, 1):
+            print(f"   -> [{i}/3] Hunting for: {spec.role} ({spec.archetype})")
             
+            # A. Generate Query
+            # We construct a query that blends role, context and pain points to find nearest match
+            query = f"{spec.role} {spec.context} {spec.archetype}"
+            
+            # B. Search
+            found_text = ""
+            try:
+                # We search for top 3 and pick best match text or just concat top 2
+                raw_chunks = recruiter.search_personas(query, limit=3)
+                if raw_chunks:
+                    found_text = "\n\n".join(raw_chunks)
+                    print(f"      -> Found {len(raw_chunks)} candidates in DB.")
+                else:
+                    print(f"      -> No direct matches in DB. Will rely on synthetic enrichment.")
+                    found_text = "No direct match in database. Generate realistic details based on requirements."
+            except Exception as e:
+                print(f"      -> Search Error: {e}")
+                found_text = "Search unavailable."
+                
+            # C. Enrichment (LLM)
+            # We feed the Spec + Found Text -> RichPersona
+            
+            # Prepare prompts
+            enrich_msg = RECRUITER_ENRICHMENT_PROMPT.replace("{target_persona_json}", spec.model_dump_json())
+            enrich_msg = enrich_msg.replace("{search_result_text}", found_text[:3000]) # truncated context
+            
+            messages = [
+                SystemMessage(content="You are an expert HR Profiler."),
+                HumanMessage(content=enrich_msg)
+            ]
+            
+            try:
+                print(f"      -> Enriching profile with LLM...")
+                response = llm.invoke(messages)
+                cleaned_json = extract_json_from_text(response.content)
+                data_dict = json.loads(cleaned_json)
+                
+                # Check for list vs dict
+                if isinstance(data_dict, list):
+                   data_dict = data_dict[0] # Take first if array returned
+                
+                rich_p = RichPersona(**data_dict)
+                rich_personas_list.append(rich_p)
+                
+                print(f"      -> Created RichPersona: {rich_p.name} | {rich_p.company_context}")
+                
+            except Exception as e:
+                print(f"      -> Enrichment Error for {spec.role}: {e}")
+                # Fallback: Create semi-synthetic from Spec
+                # Note: We miss age/bio etc. but enough to proceed?
+                # Actually, better to skip or retry. Let's try to make a minimal one.
+                pass
+
     except Exception as e:
-        print(f"   -> Recruiter Error: {e}")
-        print("   -> Continuing with synthetic personas only.")
+        print(f"   -> Recruiter Critical Error: {e}")
+        
+    if not rich_personas_list:
+        print("   -> Recruiter failed to generate any personas. Using Synthetic fallback downstream.")
         
     return {
-        "selected_personas": [p.model_dump() for p in selected_personas], # Store as dicts in state
+        "selected_personas": [p.model_dump() for p in rich_personas_list], # Compatible with state key
         "iteration_count": state["iteration_count"]
     }
 
@@ -496,11 +497,24 @@ def simulation_node(state: GraphState) -> GraphState:
             rich_p = RichPersona(**p_dict)
             
             # Create a TargetPersona object for the simulation loop
+            # Mapping RichPersona -> TargetPersona
+            # Model 2.0: name, role, age, company_context, bio, psychotype, key_frustrations, tech_stack, hidden_constraints
+            
+            # Construct a rich context string
+            full_context = (
+                f"Bio: {rich_p.bio}\n"
+                f"Age: {rich_p.age}\n"
+                f"Company: {rich_p.company_context}\n"
+                f"Frustrations: {', '.join(rich_p.key_frustrations)}\n"
+                f"Tech Stack: {', '.join(rich_p.tech_stack)}\n"
+                f"Hidden Constraints: {rich_p.hidden_constraints}"
+            )
+
             target_p = TargetPersona(
                 name=rich_p.name,
                 role=rich_p.role,
-                archetype=rich_p.attitude,
-                context=f"{rich_p.background}. {rich_p.original_text[:300]}..."
+                archetype=rich_p.psychotype,
+                context=full_context
             )
             
             personas_to_interview.append(target_p)
@@ -640,14 +654,18 @@ def simulation_node(state: GraphState) -> GraphState:
         # We ask the Analyst model to summarize this specific interview based on the FULL logs
         summary_prompt = f"""
         ANALYZE THIS INTERVIEW TRANSCRIPT:
-        {conversation_log}
+        {conversation_log[:15000]} # Limit context to avoid overflow
         
-        Based on the respondent's INNER THOUGHTS and verbal answers:
-        1. How much pain do they really feel? (1-10)
-        2. Would they actually pay? (1-10)
-        3. Summarize the key insights.
+        Based on the respondent's INNER THOUGHTS and verbal answers, fill this strict JSON:
         
-        Return STRICT JSON (InterviewResult schema).
+        REQUIRED JSON STRUCTURE:
+        {{
+            "transcript_summary": "String: Key insights and summary of the conversation",
+            "pain_level": Int (1-10),
+            "willingness_to_pay": Int (1-10)
+        }}
+        
+        CRITICAL: Do not use keys like 'pain_score' or 'pay_score'. Use 'pain_level' and 'willingness_to_pay'.
         """
         
         try:
@@ -660,20 +678,55 @@ def simulation_node(state: GraphState) -> GraphState:
                 raw_content = "".join([b.get("text", "") for b in raw_content if isinstance(b, dict)])
             
             cleaned_json = extract_json_from_text(raw_content)
+            if not cleaned_json:
+                 raise ValueError("LLM returned empty JSON")
+                 
             data_dict = json.loads(cleaned_json)
             
             # Fix nested objects if any
-            if "persona" not in data_dict:
-                 data_dict["persona"] = {}
-            data_dict["persona"]["name"] = p.name
-            data_dict["persona"]["role"] = p.role
-            data_dict["persona"]["background"] = p.context[:100]
+            if "persona" in data_dict:
+                 # Flatten if model nested it despite instructions
+                 data_dict = data_dict["persona"]
+                 
+            # Validation fix: ensure keys exist
+            if "pain_level" not in data_dict and "pain_score" in data_dict:
+                 data_dict["pain_level"] = data_dict["pain_score"]
+            if "willingness_to_pay" not in data_dict and "pay_score" in data_dict:
+                 data_dict["willingness_to_pay"] = data_dict["pay_score"]
 
-            result = InterviewResult(**data_dict)
+            # Re-construct proper nested structure for Pydantic (InterviewResult has 'persona' field)
+            # We need to WRAP the summary INT0 InterviewResult, not flattening it.
+            # Wait, InterviewResult definition:
+            # class InterviewResult(BaseModel):
+            #     persona: UserPersona
+            #     transcript_summary: str
+            #     pain_level: int
+            #     willingness_to_pay: int
+            
+            # The LLM gives us the flat fields. We must add 'persona' manually.
+            
+            final_data = {
+                "persona": {
+                    "name": p.name,
+                    "role": p.role,
+                    "background": p.context[:200]
+                },
+                "transcript_summary": data_dict.get("transcript_summary", "No summary provided"),
+                "pain_level": int(data_dict.get("pain_level", 0)),
+                "willingness_to_pay": int(data_dict.get("willingness_to_pay", 0))
+            }
+
+            result = InterviewResult(**final_data)
             raw_interviews.append(result)
             
+            # Success!
+            
         except Exception as e:
-            print(f"   -> Summary Error for {p.name}: {e}")
+            print(f"   -> CRITICAL SUMMARY ERROR for {p.name}: {e}")
+            print("   -> INTERRUPTING SIMULATION due to file saving/processing risk.")
+            # Break the loop to stop wasting money and notify user
+            # We also ensure we save what we have so far?
+            break
 
     # --- SAVE ARTIFACT: TRANSCRIPTS ---
     if raw_interviews:
