@@ -7,60 +7,74 @@ function TranscriptModal({ interview, onClose }) {
     : 0;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content fade-in" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>
-            <span>📜</span>
-            {interview.persona.name} — Interview Transcript
+    <div className="modal-overlay" onClick={onClose} style={{
+      background: 'rgba(0,0,0,0.85)',
+      backdropFilter: 'grayscale(100%) blur(2px)' // Film noir vibe
+    }}>
+      <div className="modal-content fade-in" onClick={(e) => e.stopPropagation()} style={{
+        background: '#fff',
+        maxWidth: '800px',
+        border: '4px solid black',
+        borderRadius: '0',
+        boxShadow: '10px 10px 0 rgba(255,255,255,0.2)'
+      }}>
+        <div className="modal-header" style={{ background: 'black', color: 'white', borderBottom: 'none' }}>
+          <h3 style={{ margin: 0, fontFamily: 'var(--font-headline)', color: 'white', textShadow: 'none' }}>
+            <span>📜</span> TRANSCRIPT: {interview.persona.name.toUpperCase()}
           </h3>
-          <button className="modal-close" onClick={onClose}>×</button>
+          <button className="modal-close" onClick={onClose} style={{ color: 'white', fontSize: '2rem' }}>×</button>
         </div>
 
-        <div className="modal-body">
+        <div className="modal-body" style={{ background: '#fcfbf9' }}>
           {/* Summary */}
-          <div style={{ marginBottom: 'var(--space-lg)' }}>
-            <h4 style={{ color: 'var(--text-secondary)', marginBottom: 'var(--space-sm)' }}>
-              📝 Summary
+          <div style={{
+            marginBottom: '2rem',
+            border: '2px solid black',
+            padding: '1rem',
+            background: '#e5e7eb'
+          }}>
+            <h4 style={{ margin: '0 0 0.5rem 0', textTransform: 'uppercase', fontSize: '0.9rem' }}>
+              📝 Executive Summary
             </h4>
-            <div className="insight-item">
+            <div style={{ fontFamily: 'var(--font-body)' }}>
               {interview.transcript_summary}
             </div>
           </div>
 
           {/* Scores */}
-          <div style={{ display: 'flex', gap: 'var(--space-lg)', marginBottom: 'var(--space-lg)' }}>
+          <div style={{ display: 'flex', gap: '2rem', marginBottom: '2rem', borderBottom: '2px dashed black', paddingBottom: '1rem' }}>
             <div className="interview-stat">
-              <span className="interview-stat-value">🔥 {interview.pain_level}/10</span>
-              <span className="interview-stat-label">Pain Level</span>
+              <span className="interview-stat-value" style={{ fontFamily: 'var(--font-headline)', fontSize: '2rem' }}>{interview.pain_level}/10</span>
+              <span className="interview-stat-label">PAIN LEVEL</span>
             </div>
             <div className="interview-stat">
-              <span className="interview-stat-value">💰 {interview.willingness_to_pay}/10</span>
-              <span className="interview-stat-label">Willingness to Pay</span>
+              <span className="interview-stat-value" style={{ fontFamily: 'var(--font-headline)', fontSize: '2rem' }}>{interview.willingness_to_pay}/10</span>
+              <span className="interview-stat-label">WTP</span>
             </div>
-            {questionCount > 0 && (
-              <div className="interview-stat">
-                <span className="interview-stat-value">❓ {questionCount}</span>
-                <span className="interview-stat-label">Questions Asked</span>
-              </div>
-            )}
           </div>
 
           {/* Full Transcript (Markdown) */}
           {interview.full_transcript && (
             <div>
-              <h4 style={{ color: 'var(--text-secondary)', marginBottom: 'var(--space-sm)' }}>
-                💬 Full Transcript
+              <h4 style={{ marginBottom: '1rem', fontFamily: 'var(--font-headline)' }}>
+                💬 RECORDED CONVERSATION
               </h4>
-              <div className="transcript-markdown">
+              <div className="transcript-markdown" style={{
+                fontFamily: 'Courier Prime, monospace',
+                fontSize: '1rem',
+                lineHeight: '1.4',
+                background: 'white',
+                border: 'none',
+                padding: '0'
+              }}>
                 <ReactMarkdown>{interview.full_transcript}</ReactMarkdown>
               </div>
             </div>
           )}
 
           {!interview.full_transcript && (
-            <p style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
-              Full transcript not available for this interview.
+            <p style={{ fontStyle: 'italic', opacity: 0.7 }}>
+              [Tape corrupted. No transcript available.]
             </p>
           )}
         </div>

@@ -7,16 +7,18 @@ function Sidebar() {
     return (
         <aside className="sidebar">
             <div className="sidebar-header">
-                <h1>🦄 AI Validator</h1>
+                <h1>🦄 VALIDATOR<br /><span style={{ fontSize: '1.2rem', color: 'var(--c-magenta)' }}>Issue #1</span></h1>
             </div>
 
-            <div className="status-indicator">
-                <div className={`status-dot ${status === 'running' ? 'processing' : status === 'complete' ? 'active' : 'idle'}`}></div>
-                <span>
-                    {status === 'idle' && 'Ready'}
-                    {status === 'running' && 'Processing...'}
-                    {status === 'complete' && 'Complete'}
-                    {status === 'error' && 'Error'}
+            <div className="status-indicator" style={{ border: '2px solid black', padding: '0.5rem', background: '#fff' }}>
+                <div className={`status-dot ${status === 'running' ? 'processing' : status === 'complete' ? 'active' : 'idle'}`}
+                    style={{ width: '12px', height: '12px', background: status === 'running' ? 'var(--c-yellow)' : status === 'complete' ? 'var(--c-cyan)' : '#ccc', border: '2px solid black' }}>
+                </div>
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 'bold', textTransform: 'uppercase' }}>
+                    {status === 'idle' && 'READY'}
+                    {status === 'running' && 'PRINTING...'}
+                    {status === 'complete' && 'PUBLISHED'}
+                    {status === 'error' && 'JAMMED'}
                 </span>
             </div>
 

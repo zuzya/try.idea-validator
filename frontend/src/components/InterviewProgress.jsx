@@ -1,88 +1,94 @@
-function InterviewProgress({ interviews, totalPersonas, isRunning, activeInterview }) {
+function InterviewProgress({ interviews, totalPersonas, isRunning }) {
     const completedCount = interviews.length;
     const progress = totalPersonas > 0 ? (completedCount / totalPersonas) * 100 : 0;
 
-    // Calculate question count from transcript for each interview
     const getQuestionCount = (interview) => {
         if (!interview?.full_transcript) return 0;
         return (interview.full_transcript.match(/\*\*Interviewer\*\*/g) || []).length;
     };
 
     return (
-        <section className="section-card glass-card fade-in">
-            <div className="section-card-header">
+        <section className="comic-panel" style={{ background: '#E0F2FE' }}>
+            <div className="section-card-header" style={{ marginBottom: '1rem', borderBottom: '2px dashed black', paddingBottom: '0.5rem' }}>
                 <h3>
                     <span className="section-icon">🗣️</span>
-                    Interviews
+                    INTERVIEW LOG
                 </h3>
             </div>
 
             <div className="interview-progress">
-                {/* Overall Stats */}
-                <div className="interview-stats">
+                {/* Stats Row */}
+                <div style={{ display: 'flex', gap: '2rem', marginBottom: '1rem' }}>
                     <div className="interview-stat">
-                        <span className="interview-stat-value">{completedCount}</span>
-                        <span className="interview-stat-label">Completed</span>
-                    </div>
-                    <div className="interview-stat">
-                        <span className="interview-stat-value">{totalPersonas}</span>
-                        <span className="interview-stat-label">Total</span>
+                        <span className="interview-stat-value" style={{ fontFamily: 'var(--font-headline)', fontSize: '1.5rem' }}>
+                            {completedCount}/{totalPersonas}
+                        </span>
+                        <span className="interview-stat-label">SUBJECTS</span>
                     </div>
                     {interviews.length > 0 && (
                         <div className="interview-stat">
-                            <span className="interview-stat-value">
+                            <span className="interview-stat-value" style={{ fontFamily: 'var(--font-headline)', fontSize: '1.5rem', color: '#EF4444' }}>
                                 {(interviews.reduce((sum, i) => sum + i.pain_level, 0) / interviews.length).toFixed(1)}
                             </span>
-                            <span className="interview-stat-label">Avg Pain</span>
-                        </div>
-                    )}
-                    {interviews.length > 0 && (
-                        <div className="interview-stat">
-                            <span className="interview-stat-value">
-                                {interviews.reduce((sum, i) => sum + getQuestionCount(i), 0)}
-                            </span>
-                            <span className="interview-stat-label">Total Questions</span>
+                            <span className="interview-stat-label">AVG PAIN</span>
                         </div>
                     )}
                 </div>
 
-                {/* Overall Progress Bar */}
-                <div className="progress-bar">
+                {/* Progress Bar Container */}
+                <div className="progress-bar" style={{
+                    height: '20px',
+                    background: 'white',
+                    border: '2px solid black',
+                    borderRadius: '0',
+                    position: 'relative'
+                }}>
                     <div
                         className="progress-bar-fill"
-                        style={{ width: `${progress}%` }}
+                        style={{
+                            width: `${progress}%`,
+                            background: `repeating-linear-gradient(
+                              45deg,
+                              var(--c-cyan),
+                              var(--c-cyan) 10px,
+                              #0ea5e9 10px,
+                              #0ea5e9 20px
+                            )`,
+                            height: '100%',
+                            transition: 'width 0.5s ease'
+                        }}
                     ></div>
                 </div>
 
-                {/* Per-Interview Progress */}
+                {/* Interview List (Compact) */}
                 {interviews.length > 0 && (
-                    <div className="interview-list">
-                        {interviews.map((interview, idx) => {
-                            const questionCount = getQuestionCount(interview);
-                            return (
-                                <div key={idx} className="interview-item">
-                                    <div className="interview-item-header">
-                                        <span className="interview-item-avatar">👤</span>
-                                        <div className="interview-item-info">
-                                            <span className="interview-item-name">{interview.persona.name}</span>
-                                            <span className="interview-item-role">{interview.persona.role}</span>
-                                        </div>
-                                        <div className="interview-item-stats">
-                                            <span className="badge badge-info">❓ {questionCount}</span>
-                                            <span className="badge badge-warning">🔥 {interview.pain_level}/10</span>
-                                            <span className="badge badge-success">💰 {interview.willingness_to_pay}/10</span>
-                                        </div>
-                                    </div>
+                    <div className="interview-list" style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {interviews.map((interview, idx) => (
+                            <div key={idx} className="interview-item" style={{
+                                background: 'white',
+                                border: '1px solid black',
+                                padding: '0.5rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <span>👤</span>
+                                    <span style={{ fontWeight: 'bold' }}>{interview.persona.name}</span>
                                 </div>
-                            );
-                        })}
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <span className="badge" style={{ background: '#FCD34D', fontSize: '0.8rem' }}>🔥 {interview.pain_level}</span>
+                                    <span className="badge" style={{ background: '#4ADE80', fontSize: '0.8rem' }}>💰 {interview.willingness_to_pay}</span>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 )}
 
                 {isRunning && (
-                    <div className="loading-state">
+                    <div className="loading-state" style={{ marginTop: '1rem', fontStyle: 'italic' }}>
                         <span className="loading-spinner"></span>
-                        <span>Conducting interviews...</span>
+                        Recording in progress...
                     </div>
                 )}
             </div>

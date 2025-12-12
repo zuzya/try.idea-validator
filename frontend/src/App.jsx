@@ -81,14 +81,17 @@ function App() {
 
       <main className="main-content">
         {/* Idea Input */}
-        <section className="idea-input-section glass-card fade-in">
-          <h2>🚀 Validate Your Startup Idea</h2>
-          <textarea
-            placeholder="Опишите вашу идею стартапа... например: Uber для выгула роботизированных собак"
-            value={idea}
-            onChange={(e) => setIdea(e.target.value)}
-            disabled={status === 'running'}
-          />
+        <section className="comic-panel idea-input-section fade-in">
+          <h2>🚀 THE PITCH</h2>
+          <div className="offset-print" style={{ marginBottom: '1rem' }}>
+            <textarea
+              placeholder="DESCRIBE YOUR IDEA HERE... (e.g. Uber for robotic dog walking)"
+              value={idea}
+              onChange={(e) => setIdea(e.target.value)}
+              disabled={status === 'running'}
+              style={{ minHeight: '120px', fontFamily: 'var(--font-body)', fontSize: '1.2rem' }}
+            />
+          </div>
           <div className="button-group">
             <button
               className="btn btn-primary"
@@ -98,10 +101,10 @@ function App() {
               {status === 'running' ? (
                 <>
                   <span className="loading-spinner"></span>
-                  Validating...
+                  WARMING UP PRESS...
                 </>
               ) : (
-                '✨ Start Validation'
+                '✨ PRINT ISSUE #1'
               )}
             </button>
 
@@ -110,14 +113,14 @@ function App() {
                 className="btn btn-danger"
                 onClick={stopValidation}
               >
-                🛑 Stop
+                🛑 STOP PRESS
               </button>
             )}
           </div>
 
           {error && (
-            <div className="badge badge-error" style={{ marginTop: 'var(--space-md)' }}>
-              ❌ Error: {error}
+            <div className="badge badge-error" style={{ marginTop: 'var(--space-md)', transform: 'rotate(2deg)' }}>
+              ❌ JAM: {error}
             </div>
           )}
         </section>

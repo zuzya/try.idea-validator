@@ -1,39 +1,59 @@
 function PersonaCard({ persona }) {
     return (
-        <div className="persona-card glass-card">
-            <div className="persona-header">
-                <div className="persona-avatar">👤</div>
+        <div className="persona-card" style={{
+            background: 'white',
+            border: '3px solid black',
+            padding: '1rem',
+            boxShadow: '4px 4px 0 rgba(0,0,0,0.2)',
+            transform: `rotate(${Math.random() * 4 - 2}deg)` // Random slight rotation
+        }}>
+            <div className="persona-header" style={{ display: 'flex', alignItems: 'center', gap: '1rem', borderBottom: '2px solid black', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
+                <div className="persona-avatar" style={{
+                    fontSize: '2rem',
+                    background: '#ccc',
+                    borderRadius: '50%',
+                    width: '50px',
+                    height: '50px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2px solid black'
+                }}>
+                    👤
+                </div>
                 <div className="persona-info">
-                    <h4>{persona.name}</h4>
-                    <span>{persona.role}</span>
+                    <h4 style={{ margin: 0, fontFamily: 'var(--font-headline)', fontSize: '1.2rem' }}>{persona.name}</h4>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', textTransform: 'uppercase' }}>{persona.role}</span>
                 </div>
             </div>
 
-            <p className="persona-bio">{persona.bio}</p>
+            <p className="persona-bio" style={{ fontFamily: 'var(--font-body)', fontSize: '0.9rem', lineHeight: '1.4' }}>
+                {persona.bio}
+            </p>
 
             {persona.company_context && (
-                <p className="persona-bio" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                <p className="persona-bio" style={{ fontSize: '0.8rem', color: '#666', fontStyle: 'italic', marginTop: '0.5rem' }}>
                     🏢 {persona.company_context}
                 </p>
             )}
 
-            {persona.key_frustrations && persona.key_frustrations.length > 0 && (
-                <div className="persona-tags">
-                    {persona.key_frustrations.slice(0, 3).map((f, idx) => (
-                        <span key={idx} className="persona-tag">😤 {f}</span>
-                    ))}
-                </div>
-            )}
-
-            {persona.tech_stack && persona.tech_stack.length > 0 && (
-                <div className="persona-tags" style={{ marginTop: 'var(--space-xs)' }}>
-                    {persona.tech_stack.slice(0, 3).map((t, idx) => (
-                        <span key={idx} className="persona-tag" style={{ background: 'rgba(59, 130, 246, 0.15)', color: 'var(--accent-blue)' }}>
-                            💻 {t}
-                        </span>
-                    ))}
-                </div>
-            )}
+            <div style={{ marginTop: '1rem' }}>
+                {persona.key_frustrations && persona.key_frustrations.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        {persona.key_frustrations.slice(0, 3).map((f, idx) => (
+                            <span key={idx} className="persona-tag" style={{
+                                background: '#FECACA',
+                                border: '1px solid black',
+                                padding: '2px 6px',
+                                fontSize: '0.75rem',
+                                fontWeight: 'bold'
+                            }}>
+                                😤 {f}
+                            </span>
+                        ))}
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

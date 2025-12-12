@@ -17,65 +17,75 @@ function IterationCard({ iteration, isActive, onTranscriptClick, config }) {
         critique,
     } = iteration;
 
-    const getStatusBadge = () => {
-        if (critique?.is_approved) {
-            return <span className="badge badge-success">🦄 APPROVED</span>;
-        }
-        if (critique) {
-            return <span className="badge badge-warning">Score: {critique.score}/10</span>;
-        }
-        if (isActive) {
-            return <span className="badge badge-info pulse">In Progress</span>;
-        }
-        return null;
-    };
-
     return (
-        <div className={`iteration-card ${isActive ? 'active' : ''}`}>
+        <div className={`iteration-card ${isActive ? 'active' : ''}`} style={{ marginBottom: '2rem' }}>
+            {/* Header / Spine */}
             <div
                 className="iteration-header"
                 onClick={() => setIsExpanded(!isExpanded)}
+                style={{
+                    background: isActive ? 'var(--c-yellow)' : 'var(--c-black)',
+                    color: isActive ? 'black' : 'white',
+                    padding: '1rem',
+                    cursor: 'pointer',
+                    border: '3px solid black',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    boxShadow: isActive ? 'none' : '4px 4px 0 rgba(0,0,0,0.3)',
+                    transform: isActive ? 'translate(2px, 2px)' : 'none',
+                    transition: 'all 0.2s'
+                }}
             >
-                <div className="iteration-header-left">
-                    <span className={`iteration-arrow ${isExpanded ? 'open' : ''}`}>▼</span>
-                    <h3 className="iteration-title">
-                        Iteration {number}
-                        {idea && <span className="iteration-idea-title">: {idea.title}</span>}
+                <div className="iteration-header-left" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <span style={{ fontSize: '1.5rem' }}>{isExpanded ? '👐' : '📕'}</span>
+                    <h3 className="iteration-title" style={{ margin: 0, fontFamily: 'var(--font-headline)', fontSize: '1.8rem', color: 'inherit' }}>
+                        ISSUE #{number}
+                        {idea && <span style={{ fontFamily: 'var(--font-body)', fontSize: '1rem', marginLeft: '1rem', opacity: 0.8 }}>: {idea.title}</span>}
                     </h3>
                 </div>
-                <div className="iteration-header-right">
-                    {getStatusBadge()}
-                </div>
+
+                {isActive && <span className="badge pulse" style={{ background: 'white', color: 'black' }}>IN PRODUCTION</span>}
             </div>
 
+            {/* Content (The Pages) */}
             {isExpanded && (
-                <div className="iteration-content fade-in">
-                    {/* Idea */}
+                <div className="iteration-content" style={{
+                    border: '3px solid black',
+                    borderTop: 'none',
+                    padding: '2rem',
+                    background: 'var(--c-paper)',
+                    backgroundImage: 'radial-gradient(#ccc 1px, transparent 1px)',
+                    backgroundSize: '20px 20px'
+                }}>
+
+                    {/* 1. The Idea Panel */}
                     {idea && (
                         <div className="iteration-section">
                             <IdeaCard idea={idea} iteration={number} />
                         </div>
                     )}
 
-                    {/* Recruited Personas */}
+                    {/* 2. The Lineup (Personas) */}
                     {recruitedPersonas && recruitedPersonas.length > 0 && (
-                        <div className="iteration-section">
-                            <section className="section-card glass-card">
-                                <div className="section-card-header">
-                                    <h3><span className="section-icon">🕵️</span> Recruited Personas</h3>
-                                </div>
-                                <div className="persona-grid">
-                                    {recruitedPersonas.map((persona, idx) => (
-                                        <PersonaCard key={idx} persona={persona} />
-                                    ))}
-                                </div>
-                            </section>
+                        <div className="iteration-section" style={{ marginTop: '2rem' }}>
+                            <h3 style={{ background: 'black', color: 'white', display: 'inline-block', padding: '0.2rem 1rem', transform: 'rotate(-2deg)' }}>THE LINEUP</h3>
+                            <div className="persona-grid" style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+                                gap: '1.5rem',
+                                marginTop: '1rem'
+                            }}>
+                                {recruitedPersonas.map((persona, idx) => (
+                                    <PersonaCard key={idx} persona={persona} />
+                                ))}
+                            </div>
                         </div>
                     )}
 
-                    {/* Interview Progress - show when interviews exist OR when active and personas recruited */}
-                    {((interviews && interviews.length > 0) || (isActive && recruitedPersonas && recruitedPersonas.length > 0)) && (
-                        <div className="iteration-section">
+                    {/* 3. The Interview Log */}
+                    {((interviews && interviews.length > 0) || (isActive && recruitedPersonas?.length > 0)) && (
+                        <div className="iteration-section" style={{ marginTop: '2rem' }}>
                             <InterviewProgress
                                 interviews={interviews || []}
                                 totalPersonas={config?.numPersonas || recruitedPersonas?.length || 3}
@@ -84,52 +94,39 @@ function IterationCard({ iteration, isActive, onTranscriptClick, config }) {
                         </div>
                     )}
 
-                    {/* Analyst Report */}
+                    {/* 4. Analyst Dossier */}
                     {analystReport && (
-                        <div className="iteration-section">
+                        <div className="iteration-section" style={{ marginTop: '3rem' }}>
                             <AnalystReport report={analystReport} />
                         </div>
                     )}
 
-                    {/* Critique */}
+                    {/* 5. The Verdict */}
                     {critique && (
-                        <div className="iteration-section">
+                        <div className="iteration-section" style={{ marginTop: '3rem' }}>
                             <CritiqueCard critique={critique} />
                         </div>
                     )}
 
-                    {/* Interview Transcripts */}
+                    {/* 6. Transcripts (Nav) */}
                     {interviews && interviews.length > 0 && (
-                        <div className="iteration-section">
-                            <section className="section-card glass-card transcript-section">
-                                <div className="section-card-header">
-                                    <h3><span className="section-icon">📜</span> Interview Transcripts</h3>
-                                </div>
-                                <div className="transcript-list">
-                                    {interviews.map((interview, idx) => (
-                                        <div
-                                            key={idx}
-                                            className="transcript-item"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onTranscriptClick(interview);
-                                            }}
-                                        >
-                                            <div className="transcript-item-info">
-                                                <span className="transcript-item-avatar">👤</span>
-                                                <div className="transcript-item-meta">
-                                                    <h4>{interview.persona.name}</h4>
-                                                    <span>{interview.persona.role}</span>
-                                                </div>
-                                            </div>
-                                            <div className="transcript-item-scores">
-                                                <span>🔥 Pain: {interview.pain_level}/10</span>
-                                                <span>💰 WTP: {interview.willingness_to_pay}/10</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </section>
+                        <div className="iteration-section" style={{ marginTop: '2rem', textAlign: 'center' }}>
+                            <h4 style={{ fontFamily: 'var(--font-headline)', marginBottom: '1rem' }}>READ FULL TRANSCRIPTS</h4>
+                            <div className="transcript-list" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'center' }}>
+                                {interviews.map((interview, idx) => (
+                                    <button
+                                        key={idx}
+                                        className="btn"
+                                        style={{ fontSize: '1rem', padding: '0.5rem 1rem' }}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onTranscriptClick(interview);
+                                        }}
+                                    >
+                                        📄 {interview.persona.name}'s TAPE
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     )}
                 </div>
