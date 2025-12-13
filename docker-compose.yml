@@ -14,12 +14,14 @@ services:
       - TAVILY_API_KEY=${TAVILY_API_KEY}
       - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
       - PROXY_URL=${PROXY_URL}
-      - LANGCHAIN_TRACING_V2=true
+      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-false}
       - LANGCHAIN_PROJECT=unicorn_validator
       # Add other env vars from .env here
     volumes:
       # Mount artifacts directory to persist data
       - ./artifacts:/app/artifacts
+      # Mount experiments directory for shared transcripts
+      - ./experiments:/app/experiments
       # Mount persisted persona db if needed
       - ./personas_index.json:/app/personas_index.json
     restart: always
@@ -34,6 +36,9 @@ services:
       - "5173:80"
     depends_on:
       - backend
+    volumes:
+      # Mount experiments to Nginx root so they are served statically
+      - ./experiments:/usr/share/nginx/html/experiments
     restart: always
 
 # Optional: Add Redis if you move to Redis Checkpointer later

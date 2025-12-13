@@ -14,6 +14,8 @@ if PROXY_URL:
     # 1. Global Proxy for Libraries that respect env vars (Google Generative AI, requests)
     os.environ["HTTP_PROXY"] = PROXY_URL
     os.environ["HTTPS_PROXY"] = PROXY_URL
+    os.environ["http_proxy"] = PROXY_URL
+    os.environ["https_proxy"] = PROXY_URL
     
     # 2. HTTPX Client for OpenAI/LangChain
     import httpx

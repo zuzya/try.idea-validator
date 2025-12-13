@@ -197,7 +197,7 @@ const useValidationStore = create((set, get) => ({
         set({ status: 'running', idea });
 
         try {
-            const response = await fetch('http://localhost:8000/api/validate', {
+            const response = await fetch('/api/validate', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
