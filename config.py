@@ -5,6 +5,22 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# === PROXY CONFIGURATION ===
+PROXY_URL = os.getenv("PROXY_URL")
+http_client = None
+
+if PROXY_URL:
+    print(f"🌍 Using Proxy: {PROXY_URL}")
+    # 1. Global Proxy for Libraries that respect env vars (Google Generative AI, requests)
+    os.environ["HTTP_PROXY"] = PROXY_URL
+    os.environ["HTTPS_PROXY"] = PROXY_URL
+    os.environ["http_proxy"] = PROXY_URL
+    os.environ["https_proxy"] = PROXY_URL
+    
+    # 2. HTTPX Client for OpenAI/LangChain
+    import httpx
+    http_client = httpx.Client(proxy=PROXY_URL)
+
 # === CONFIGURATION ===
 MOCK_SIMULATION = os.getenv("MOCK_SIMULATION", "false").lower() == "true"  # Set to true to skip real LLM calls in simulation
 
@@ -35,7 +51,8 @@ llm_critic = ChatOpenAI(
     # model="gpt-5-mini", 
     temperature=0.1, # Keep it cold and logical
     reasoning_effort="high", # Enable deep thinking
-    openai_api_key=os.getenv("OPENAI_API_KEY")
+    openai_api_key=os.getenv("OPENAI_API_KEY"),
+    http_client=http_client
 )
 
 # ROUTER: Gemini 2.5 Flash (Speed & Cost)
@@ -44,6 +61,7 @@ llm_router = ChatGoogleGenerativeAI(
     model="gemini-2.5-flash",
     temperature=0,
     google_api_key=os.getenv("GOOGLE_API_KEY")
+    # Google lib uses env vars set above
 )
 
 # FAST MODEL: Gemini 2.5 Flash (For Debug Mode)
@@ -52,7 +70,8 @@ llm_router = ChatGoogleGenerativeAI(
 llm_fast = ChatOpenAI(
     model="gpt-4o-mini",
     temperature=0.7,
-    openai_api_key=os.getenv("OPENAI_API_KEY")
+    openai_api_key=os.getenv("OPENAI_API_KEY"),
+    http_client=http_client
 )
 
 GENERATOR_SYSTEM_PROMPT = """

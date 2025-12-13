@@ -1,0 +1,26 @@
+fastapi
+uvicorn
+python-dotenv
+pydantic
+numpy
+requests
+httpx>=0.27.0
+
+# AI & LangChain
+langgraph
+langchain
+langchain-community
+langchain-core
+langchain-openai
+langchain-google-genai
+google-generativeai
+
+# Vector DB (If needed for local Chroma, but check if we can skip)
+# chromadb was causing issues and we might rely on Google embeddings + local JSON.
+# However, if langgraph or other tools imply it, we might need it. 
+# Given previous error was about chromadb dependency, let's omit it if possible 
+# and see if it builds. The user's code 'google_recruiter.py' uses pure numpy for vector search.
+# So we DO NOT need chromadb.
+
+# Monitoring (Optional but good)
+# langsmith 
