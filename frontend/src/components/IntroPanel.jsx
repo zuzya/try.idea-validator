@@ -2,6 +2,7 @@ function IntroPanel() {
     return (
         <div className="intro-panel" style={{
             background: 'var(--c-paper)',
+            color: 'var(--c-ink)',
             border: '3px solid var(--c-ink)',
             padding: '1.5rem',
             marginBottom: '2rem',
