@@ -66,17 +66,17 @@ class GoogleRecruiter:
         logger.info(f"Loaded {len(self.texts)} personas and embeddings.")
 
     @retry.Retry(predicate=retry.if_exception_type(Exception))
-    def search_personas(self, startup_idea: str, limit: int = 10) -> List[str]:
+    def search_personas(self, query: str, limit: int = 10) -> List[str]:
         """
         Searches for personas using vector similarity.
         """
         logger.info(f"--- [Recruiter] Search Query ---")
-        logger.info(f"Query: {startup_idea}")
+        logger.info(f"Query: {query}")
         
         # Embed query
         result = genai.embed_content(
             model=EMBEDDING_MODEL,
-            content=startup_idea,
+            content=query,
             task_type="retrieval_query"
         )
         query_embedding = np.array(result['embedding'])

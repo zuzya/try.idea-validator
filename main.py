@@ -40,9 +40,26 @@ def route_after_generator(state: GraphState) -> str:
 
 def route_after_analyst(state: GraphState) -> str:
     """
-    After analyst, always go back to generator to apply research insights.
+    After analyst:
+    - If we haven't completed enough interview cycles, go back to generator for another cycle
+    - If we've completed the required interview_iterations, go to critic
     """
-    return "generator"
+    # Track completed interview cycles (each analyst run = 1 cycle complete)
+    current_interview_cycle = state.get("current_interview_cycle", 1)
+    interview_iterations = state.get("interview_iterations", 1)
+    enable_critic = state.get("enable_critic", True)
+    
+    print(f"   [ROUTE] Interview Cycle {current_interview_cycle}/{interview_iterations}")
+    
+    if current_interview_cycle < interview_iterations:
+        # Need more interview cycles - go back to generator
+        return "generator"
+    else:
+        # Done with interview cycles - go to critic if enabled
+        if enable_critic:
+            return "critic"
+        else:
+            return "end"  # Stop if critic disabled
 
 def should_continue(state: GraphState) -> str:
     """
@@ -85,10 +102,72 @@ workflow.add_conditional_edges(
     }
 )
 
+from langgraph.constants import Send
+
+def map_personas_to_interviews(state: GraphState):
+    """
+    Map-step: Generates parallel simulation tasks for each persona.
+    """
+    print("   -> [MAP] Distributing parallel simulations...")
+    personas = state.get('selected_personas', [])
+    
+    # If no personas (fallback to researcher default?) - handled in nodes logic or here.
+    # If empty, we might skip to generator or error out. 
+    # For now assume at least one exists (or simulation_node handles it? No, if list empty map returns empty)
+    if not personas and state.get("interview_guide"):
+         print("   -> [MAP] 'selected_personas' empty. Falling back to RESEARCHER target personas.")
+         guide_personas = state["interview_guide"].target_personas
+         # Convert TargetPersona (Pydantic) to dicts compatible with RichPersona structure (roughly)
+         # RichPersona expects: name, role, company_context, bio, key_frustrations, tech_stack, hidden_constraints, age, psychotype, original_text
+         # We'll fake it.
+         personas = []
+         for gp in guide_personas:
+             personas.append({
+                 "name": gp.name,
+                 "role": gp.role,
+                 "company_context": gp.context,
+                 "bio": f"{gp.archetype} working in context: {gp.context}",
+                 "key_frustrations": ["Unknown"],
+                 "tech_stack": ["Unknown"],
+                 "hidden_constraints": "None",
+                 "age": "30-40",
+                 "psychotype": gp.archetype,
+                 "original_text": "Synthetic fallback"
+             })
+
+    return [
+        Send("simulation", {
+            "rich_persona": p,
+            "interview_guide": state["interview_guide"],
+            "current_idea": state["current_idea"],
+            "use_fast_model": state.get("use_fast_model", False)
+        }) for p in personas
+    ]
+
+# ...
+
 workflow.add_edge("researcher", "recruiter")
-workflow.add_edge("recruiter", "simulation")
+
+# Replace linear edge with Conditional/Map edge
+# workflow.add_edge("recruiter", "simulation") 
+workflow.add_conditional_edges(
+    "recruiter",
+    map_personas_to_interviews,
+    path_map=["simulation"] 
+)
+
 workflow.add_edge("simulation", "analyst")
-workflow.add_edge("analyst", "generator") # Loop back for Pivot
+
+# Conditional edge after analyst: either loop for more interviews or go to critic
+workflow.add_conditional_edges(
+    "analyst",
+    route_after_analyst,
+    {
+        "generator": "researcher",  # More interview cycles -> restart from researcher
+        "critic": "critic",         # Done with interviews -> go to critic
+        "end": END                  # Stop if critic disabled
+    }
+)
 
 workflow.add_conditional_edges(
     "critic",

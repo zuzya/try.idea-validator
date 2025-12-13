@@ -1,0 +1,111 @@
+/* Comic App Layout - Asphalt Edition */
+
+.app {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--c-asphalt);
+  /* Dark BG */
+  padding: 0;
+  gap: 0;
+}
+
+/* Sidebar: Warm Paper Panel */
+.sidebar {
+  width: 320px;
+  min-width: 320px;
+  background-color: var(--c-paper-2);
+  /* Slightly darker paper */
+  border-right: var(--border-width) solid var(--c-ink);
+  /* Ink border separating from Asphalt */
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  z-index: 10;
+  box-shadow: 4px 0 10px rgba(0, 0, 0, 0.5);
+  /* Shadow falling onto the asphalt */
+}
+
+.sidebar-header h1 {
+  font-size: 2.5rem;
+  text-align: center;
+  transform: rotate(-2deg);
+  line-height: 0.9;
+  margin-bottom: 0;
+}
+
+.sidebar-section {
+  padding: 1rem;
+}
+
+.sidebar-section-title {
+  display: block;
+  font-family: var(--font-headline);
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+  background: var(--c-ink);
+  color: var(--c-paper);
+  padding: 4px 12px;
+  transform: skew(-5deg);
+  display: inline-block;
+}
+
+/* Main Content: The "Table" where issues are laid out */
+.main-content {
+  flex: 1;
+  background-color: var(--c-asphalt);
+  /* Ensure matches app */
+  /* Remove pattern here if body has it, or keep it */
+  padding: 2rem 4rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  overflow-y: auto;
+  position: relative;
+}
+
+/* Ensure the main scrollbar is visible on dark bg */
+.sidebar::-webkit-scrollbar,
+.main-content::-webkit-scrollbar {
+  width: 10px;
+}
+
+.sidebar::-webkit-scrollbar-track,
+.main-content::-webkit-scrollbar-track {
+  background: var(--c-paper-dim, #e0e0e0);
+  border-left: 2px solid var(--c-ink);
+}
+
+.sidebar::-webkit-scrollbar-thumb,
+.main-content::-webkit-scrollbar-thumb {
+  background: var(--c-ink);
+  border: 1px solid var(--c-paper);
+}
+
+/* Mobile Responsive */
+@media (max-width: 900px) {
+  .app {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: relative;
+    top: 0;
+    border-right: none;
+    border-bottom: 4px solid var(--c-ink);
+  }
+
+  .main-content {
+    padding: 1rem;
+  }
+}
+
+/* Component specific overrides (until refactored) */
+.idea-input-section {
+  /* It will be refactored, but making sure it has spacing */
+  margin-bottom: 3rem;
+}

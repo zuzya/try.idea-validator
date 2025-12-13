@@ -47,11 +47,12 @@ llm_router = ChatGoogleGenerativeAI(
 )
 
 # FAST MODEL: Gemini 2.5 Flash (For Debug Mode)
-llm_fast = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
+# FAST MODEL: GPT-4o-mini (For Debug Mode / Fast Iterations)
+# Replaced Gemini Flash as requested for better speed/reliability in debug
+llm_fast = ChatOpenAI(
+    model="gpt-4o-mini",
     temperature=0.7,
-    google_api_key=os.getenv("GOOGLE_API_KEY"),
-    safety_settings=safety_settings
+    openai_api_key=os.getenv("OPENAI_API_KEY")
 )
 
 GENERATOR_SYSTEM_PROMPT = """
@@ -130,18 +131,19 @@ RESEARCHER_SYSTEM_PROMPT = """
 - Формат: "Мы верим, что [КТО] имеет проблему [КАКУЮ], поэтому они [СДЕЛАЮТ ЧТО]."
 - Типы гипотез: Problem (есть ли боль?), Solution (решает ли это боль?), Monetization (заплатят ли?).
 
-#### 2. Профиль Поиска (Target Personas)
-Опиши 3 сегмента аудитории для Рекрутера. Нам нужны РАЗНЫЕ взгляды.
+#### 2. ПРОФИЛЬ ПОИСКА (Target Personas)
+Опиши 3 сегмента аудитории (Buyer, User, Skeptic).
+Рекрутер — это поисковый алгоритм, работающий с базой англоязычных биографий.
 
-*   **Сегмент А (Economic Buyer):** Тот, кто распоряжается бюджетом. Ему важны цифры, ROI, отчеты.
-*   **Сегмент Б (End User):** Тот, кто будет работать руками. Ему важен UX, скорость, отсутствие лишних кликов.
-*   **Сегмент В (The Skeptic / Blocker):** Тот, кто будет против внедрения. (Например: Сисадмин, Юрист, Консервативный менеджер). *Это самый важный сегмент для проверки на прочность.*
-
-Для каждого сегмента укажи:
-- **Role:** Названия должностей (Job Titles).
-- **Context:** В какой ситуации находится человек? (Например: "Работает в энтерпрайзе с легаси-кодом" или "Фрилансер без стабильного дохода").
-- **Trigger:** Какое событие заставляет его искать решение?
-- **Search Keywords:** 3-5 тегов для семантического поиска в базе (Например: "Chief Revenue Officer", "B2B Sales", "High churn rate").
+Для каждого сегмента заполни:
+- **Role:** Название должности (На русском).
+- **name:** Условное имя (напр. "Мария Петровна" или "Типичный Бухгалтер").
+- **Context:** Ситуация и боли (На русском).
+- **search_query_en (ВАЖНО):** Поисковый запрос СТРОГО НА АНГЛИЙСКОМ ЯЗЫКЕ.
+  - Это должно быть короткое описание биографии от третьего лица.
+  - НЕ используй слова "keywords", "trigger". Пиши так, как человек пишет о себе в профиле LinkedIn/Bio.
+  - *Пример:* "A senior sales manager with 10 years experience looking for CRM automation tools."
+  - *Плохой пример:* "Sales, CRM, B2B" (это не работает).
 
 #### 3. Сценарий Интервью (The Mom Test)
 Напиши 5-7 вопросов.
@@ -151,15 +153,16 @@ RESEARCHER_SYSTEM_PROMPT = """
 
 ### ФОРМАТ ОТВЕТА
 Верни строго валидный JSON, соответствующий схеме `InterviewGuide`.
-Язык: ТОЛЬКО РУССКИЙ.
+ВЕСЬ текст на Русском, КРОМЕ поля `search_query_en`.
 
 Пример структуры `target_personas` внутри JSON:
 [
   {
+    "name": "Алексей (Директор)",
     "role": "Коммерческий директор (Head of Sales)",
     "archetype": "Buyer",
     "context": "Компания 50-200 человек, внедряют CRM, бардак в отделе продаж.",
-    "search_keywords": ["Sales Director", "CRM implementation", "KPI management"]
+    "search_query_en": "A senior sales manager with 10 years experience looking for CRM automation tools"
   },
   ...
 ]
