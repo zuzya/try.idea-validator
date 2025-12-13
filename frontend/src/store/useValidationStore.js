@@ -16,7 +16,8 @@ const useValidationStore = create((set, get) => ({
         mockSimulation: false,
         enableSimulation: true,
         enableCritic: true,
-        useFastModel: false,
+        enableCritic: true,
+        useFastModel: true, // Default to Fast (Flash) models
     },
 
     // Iteration History - array of complete iteration snapshots

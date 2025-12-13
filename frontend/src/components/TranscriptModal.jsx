@@ -8,32 +8,32 @@ function TranscriptModal({ interview, onClose }) {
 
   return (
     <div className="modal-overlay" onClick={onClose} style={{
-      background: 'rgba(0,0,0,0.85)',
-      backdropFilter: 'grayscale(100%) blur(2px)' // Film noir vibe
+      background: 'rgba(0,0,0,0.5)',
+      backdropFilter: 'blur(2px)'
     }}>
       <div className="modal-content fade-in" onClick={(e) => e.stopPropagation()} style={{
-        background: '#fff',
+        background: 'var(--c-paper)',
         maxWidth: '800px',
-        border: '4px solid black',
+        border: 'var(--border-width) solid var(--c-ink)',
         borderRadius: '0',
-        boxShadow: '10px 10px 0 rgba(255,255,255,0.2)'
+        boxShadow: 'var(--shadow-deep)'
       }}>
-        <div className="modal-header" style={{ background: 'black', color: 'white', borderBottom: 'none' }}>
-          <h3 style={{ margin: 0, fontFamily: 'var(--font-headline)', color: 'white', textShadow: 'none' }}>
+        <div className="modal-header" style={{ background: 'var(--c-ink)', color: 'var(--c-panel)', borderBottom: 'none', padding: '1rem' }}>
+          <h3 style={{ margin: 0, fontFamily: 'var(--font-headline)', color: 'var(--c-panel)', textShadow: 'none' }}>
             <span>📜</span> TRANSCRIPT: {interview.persona.name.toUpperCase()}
           </h3>
-          <button className="modal-close" onClick={onClose} style={{ color: 'white', fontSize: '2rem' }}>×</button>
+          <button className="modal-close" onClick={onClose} style={{ color: 'var(--c-panel)', fontSize: '2rem', background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
         </div>
 
-        <div className="modal-body" style={{ background: '#fcfbf9' }}>
+        <div className="modal-body" style={{ background: 'var(--c-paper)', padding: '2rem' }}>
           {/* Summary */}
           <div style={{
             marginBottom: '2rem',
-            border: '2px solid black',
+            border: '2px solid var(--c-ink)',
             padding: '1rem',
-            background: '#e5e7eb'
+            background: 'var(--c-paper-2)'
           }}>
-            <h4 style={{ margin: '0 0 0.5rem 0', textTransform: 'uppercase', fontSize: '0.9rem' }}>
+            <h4 style={{ margin: '0 0 0.5rem 0', textTransform: 'uppercase', fontSize: '0.9rem', fontFamily: 'var(--font-headline)' }}>
               📝 Executive Summary
             </h4>
             <div style={{ fontFamily: 'var(--font-body)' }}>
@@ -42,14 +42,14 @@ function TranscriptModal({ interview, onClose }) {
           </div>
 
           {/* Scores */}
-          <div style={{ display: 'flex', gap: '2rem', marginBottom: '2rem', borderBottom: '2px dashed black', paddingBottom: '1rem' }}>
+          <div style={{ display: 'flex', gap: '2rem', marginBottom: '2rem', borderBottom: '2px dashed var(--c-ink)', paddingBottom: '1rem' }}>
             <div className="interview-stat">
-              <span className="interview-stat-value" style={{ fontFamily: 'var(--font-headline)', fontSize: '2rem' }}>{interview.pain_level}/10</span>
-              <span className="interview-stat-label">PAIN LEVEL</span>
+              <span className="interview-stat-value" style={{ fontFamily: 'var(--font-headline)', fontSize: '2rem', color: 'var(--c-ink)' }}>{interview.pain_level}/10</span>
+              <span className="interview-stat-label" style={{ fontFamily: 'var(--font-body)', fontWeight: 'bold' }}>PAIN LEVEL</span>
             </div>
             <div className="interview-stat">
-              <span className="interview-stat-value" style={{ fontFamily: 'var(--font-headline)', fontSize: '2rem' }}>{interview.willingness_to_pay}/10</span>
-              <span className="interview-stat-label">WTP</span>
+              <span className="interview-stat-value" style={{ fontFamily: 'var(--font-headline)', fontSize: '2rem', color: 'var(--c-ink)' }}>{interview.willingness_to_pay}/10</span>
+              <span className="interview-stat-label" style={{ fontFamily: 'var(--font-body)', fontWeight: 'bold' }}>WTP</span>
             </div>
           </div>
 
@@ -63,9 +63,9 @@ function TranscriptModal({ interview, onClose }) {
                 fontFamily: 'Courier Prime, monospace',
                 fontSize: '1rem',
                 lineHeight: '1.4',
-                background: 'white',
-                border: 'none',
-                padding: '0'
+                background: 'var(--c-panel)',
+                border: 'var(--border-width) solid var(--c-ink)',
+                padding: '1rem'
               }}>
                 <ReactMarkdown>{interview.full_transcript}</ReactMarkdown>
               </div>

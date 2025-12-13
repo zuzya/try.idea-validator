@@ -4,6 +4,7 @@ import PersonaCard from './PersonaCard';
 import InterviewProgress from './InterviewProgress';
 import AnalystReport from './AnalystReport';
 import CritiqueCard from './CritiqueCard';
+import ResearchGuide from './ResearchGuide';
 
 function IterationCard({ iteration, isActive, onTranscriptClick, config }) {
     const [isExpanded, setIsExpanded] = useState(isActive);
@@ -15,6 +16,7 @@ function IterationCard({ iteration, isActive, onTranscriptClick, config }) {
         interviews,
         analystReport,
         critique,
+        researchGuide,
     } = iteration;
 
     return (
@@ -24,11 +26,11 @@ function IterationCard({ iteration, isActive, onTranscriptClick, config }) {
                 className="iteration-header"
                 onClick={() => setIsExpanded(!isExpanded)}
                 style={{
-                    background: isActive ? 'var(--c-yellow)' : 'var(--c-black)',
-                    color: isActive ? 'black' : 'white',
+                    background: isActive ? 'var(--c-primary)' : 'var(--c-ink-soft)',
+                    color: isActive ? 'var(--c-panel)' : 'var(--c-panel)', /* White text on both */
                     padding: '1rem',
                     cursor: 'pointer',
-                    border: '3px solid black',
+                    border: '3px solid var(--c-ink)',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
@@ -45,17 +47,17 @@ function IterationCard({ iteration, isActive, onTranscriptClick, config }) {
                     </h3>
                 </div>
 
-                {isActive && <span className="badge pulse" style={{ background: 'white', color: 'black' }}>IN PRODUCTION</span>}
+                {isActive && <span className="badge pulse" style={{ background: 'var(--c-highlight)', color: 'var(--c-ink)', border: '2px solid var(--c-ink)' }}>IN PRODUCTION</span>}
             </div>
 
             {/* Content (The Pages) */}
             {isExpanded && (
                 <div className="iteration-content" style={{
-                    border: '3px solid black',
+                    border: '3px solid var(--c-ink)',
                     borderTop: 'none',
                     padding: '2rem',
                     background: 'var(--c-paper)',
-                    backgroundImage: 'radial-gradient(#ccc 1px, transparent 1px)',
+                    backgroundImage: 'radial-gradient(var(--c-muted) 1px, transparent 1px)',
                     backgroundSize: '20px 20px'
                 }}>
 
@@ -66,10 +68,17 @@ function IterationCard({ iteration, isActive, onTranscriptClick, config }) {
                         </div>
                     )}
 
+                    {/* 1.5 The Research Guide */}
+                    {researchGuide && (
+                        <div className="iteration-section" style={{ marginTop: '2rem' }}>
+                            <ResearchGuide guide={researchGuide} />
+                        </div>
+                    )}
+
                     {/* 2. The Lineup (Personas) */}
                     {recruitedPersonas && recruitedPersonas.length > 0 && (
                         <div className="iteration-section" style={{ marginTop: '2rem' }}>
-                            <h3 style={{ background: 'black', color: 'white', display: 'inline-block', padding: '0.2rem 1rem', transform: 'rotate(-2deg)' }}>THE LINEUP</h3>
+                            <h3 style={{ background: 'var(--c-ink)', color: 'var(--c-panel)', display: 'inline-block', padding: '0.2rem 1rem', transform: 'rotate(-2deg)' }}>THE LINEUP</h3>
                             <div className="persona-grid" style={{
                                 display: 'grid',
                                 gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
@@ -116,7 +125,7 @@ function IterationCard({ iteration, isActive, onTranscriptClick, config }) {
                                 {interviews.map((interview, idx) => (
                                     <button
                                         key={idx}
-                                        className="btn"
+                                        className="btn btn-secondary"
                                         style={{ fontSize: '1rem', padding: '0.5rem 1rem' }}
                                         onClick={(e) => {
                                             e.stopPropagation();

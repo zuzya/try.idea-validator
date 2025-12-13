@@ -59,7 +59,7 @@ def route_after_analyst(state: GraphState) -> str:
         if enable_critic:
             return "critic"
         else:
-            return "generator"  # Continue without critic
+            return "end"  # Stop if critic disabled
 
 def should_continue(state: GraphState) -> str:
     """
@@ -164,7 +164,8 @@ workflow.add_conditional_edges(
     route_after_analyst,
     {
         "generator": "researcher",  # More interview cycles -> restart from researcher
-        "critic": "critic"          # Done with interviews -> go to critic
+        "critic": "critic",         # Done with interviews -> go to critic
+        "end": END                  # Stop if critic disabled
     }
 )
 

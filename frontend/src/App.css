@@ -1,31 +1,32 @@
-/* Comic App Layout */
+/* Comic App Layout - Asphalt Edition */
 
 .app {
   display: flex;
   min-height: 100vh;
-  background-color: var(--c-black);
-  /* The table behind the comic */
-  background-image: radial-gradient(#333 15%, transparent 16%);
-  background-size: 16px 16px;
-  padding: 1rem;
-  gap: 1rem;
+  background-color: var(--c-asphalt);
+  /* Dark BG */
+  padding: 0;
+  gap: 0;
 }
 
-/* Sidebar as "Comic Spine" or Marginalia */
+/* Sidebar: Warm Paper Panel */
 .sidebar {
-  width: 280px;
-  min-width: 280px;
-  background-color: var(--c-paper);
-  border: var(--border-width) solid var(--c-black);
-  box-shadow: var(--shadow-comic);
-  padding: 1.5rem;
+  width: 320px;
+  min-width: 320px;
+  background-color: var(--c-paper-2);
+  /* Slightly darker paper */
+  border-right: var(--border-width) solid var(--c-ink);
+  /* Ink border separating from Asphalt */
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 2rem;
   position: sticky;
-  top: 1rem;
-  height: calc(100vh - 2rem);
+  top: 0;
+  height: 100vh;
   overflow-y: auto;
+  z-index: 10;
+  box-shadow: 4px 0 10px rgba(0, 0, 0, 0.5);
+  /* Shadow falling onto the asphalt */
 }
 
 .sidebar-header h1 {
@@ -37,8 +38,7 @@
 }
 
 .sidebar-section {
-  border-top: 2px dashed var(--c-black);
-  padding-top: 1.5rem;
+  padding: 1rem;
 }
 
 .sidebar-section-title {
@@ -46,52 +46,48 @@
   font-family: var(--font-headline);
   font-size: 1.2rem;
   margin-bottom: 1rem;
-  background: var(--c-black);
-  color: var(--c-white);
-  padding: 2px 8px;
+  background: var(--c-ink);
+  color: var(--c-paper);
+  padding: 4px 12px;
   transform: skew(-5deg);
   display: inline-block;
 }
 
-/* Main Content as "Comic Page" */
+/* Main Content: The "Table" where issues are laid out */
 .main-content {
   flex: 1;
-  background-color: var(--c-paper);
-  border: var(--border-width) solid var(--c-black);
-  box-shadow: var(--shadow-deep);
-  padding: 2rem;
-  max-width: 1200px;
+  background-color: var(--c-asphalt);
+  /* Ensure matches app */
+  /* Remove pattern here if body has it, or keep it */
+  padding: 2rem 4rem;
+  max-width: 1400px;
   margin: 0 auto;
   overflow-y: auto;
   position: relative;
 }
 
-/* Page "Staple" visual decoration (optional, maybe pseudo elements later) */
-
-/* Scrollbar specific for this theme */
+/* Ensure the main scrollbar is visible on dark bg */
 .sidebar::-webkit-scrollbar,
 .main-content::-webkit-scrollbar {
-  width: 12px;
+  width: 10px;
 }
 
 .sidebar::-webkit-scrollbar-track,
 .main-content::-webkit-scrollbar-track {
-  background: var(--c-paper-dim);
-  border-left: 2px solid var(--c-black);
+  background: var(--c-paper-dim, #e0e0e0);
+  border-left: 2px solid var(--c-ink);
 }
 
 .sidebar::-webkit-scrollbar-thumb,
 .main-content::-webkit-scrollbar-thumb {
-  background: var(--c-black);
-  border: 2px solid var(--c-paper);
+  background: var(--c-ink);
+  border: 1px solid var(--c-paper);
 }
 
 /* Mobile Responsive */
 @media (max-width: 900px) {
   .app {
     flex-direction: column;
-    padding: 0;
-    gap: 0;
   }
 
   .sidebar {
@@ -99,14 +95,11 @@
     height: auto;
     position: relative;
     top: 0;
-    border: none;
-    border-bottom: 3px solid var(--c-black);
-    box-shadow: none;
+    border-right: none;
+    border-bottom: 4px solid var(--c-ink);
   }
 
   .main-content {
-    border: none;
-    box-shadow: none;
     padding: 1rem;
   }
 }

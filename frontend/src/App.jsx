@@ -6,6 +6,7 @@ import './App.css';
 import Sidebar from './components/Sidebar';
 import IterationCard from './components/IterationCard';
 import TranscriptModal from './components/TranscriptModal';
+import IntroPanel from './components/IntroPanel';
 
 function App() {
   const {
@@ -69,9 +70,15 @@ function App() {
 
   // Combine completed iterations with current in-progress iteration
   const allIterations = [...iterations];
-  const showCurrentIteration = currentIteration.idea ||
+
+  // Only show current iteration if it's active AND not already in the history list (by ID or number)
+  // This prevents duplication when the iteration completes but state lingers
+  const isDuplicate = allIterations.some(iter => iter.number === currentIteration.number);
+  const showCurrentIteration = (status === 'running' || status === 'error') && !isDuplicate && (
+    currentIteration.idea ||
     currentIteration.recruitedPersonas.length > 0 ||
-    currentIteration.interviews.length > 0;
+    currentIteration.interviews.length > 0
+  );
 
   const hasResults = allIterations.length > 0 || showCurrentIteration;
 
@@ -80,28 +87,48 @@ function App() {
       <Sidebar />
 
       <main className="main-content">
+        <IntroPanel />
+
         {/* Idea Input */}
-        <section className="comic-panel idea-input-section fade-in">
-          <h2>🚀 THE PITCH</h2>
+        <section className="comic-panel idea-input-section fade-in" style={{ background: 'var(--c-panel)', padding: '1.5rem', border: 'var(--border-width) solid var(--c-ink)' }}>
+          <h2 style={{ fontFamily: 'var(--font-headline)', fontSize: '2rem', marginBottom: '1rem' }}>
+            🚀 THE PITCH
+          </h2>
           <div className="offset-print" style={{ marginBottom: '1rem' }}>
             <textarea
               placeholder="DESCRIBE YOUR IDEA HERE... (e.g. Uber for robotic dog walking)"
               value={idea}
               onChange={(e) => setIdea(e.target.value)}
               disabled={status === 'running'}
-              style={{ minHeight: '120px', fontFamily: 'var(--font-body)', fontSize: '1.2rem' }}
+              style={{
+                minHeight: '150px',
+                fontFamily: 'var(--font-body)',
+                fontSize: '1.2rem',
+                background: 'var(--c-panel)',
+                color: 'var(--c-ink)',
+                width: '100%'
+              }}
             />
           </div>
-          <div className="button-group">
+          <div className="button-group" style={{ display: 'flex', gap: '1rem' }}>
             <button
               className="btn btn-primary"
               onClick={startValidation}
               disabled={!idea.trim() || status === 'running'}
+              style={{
+                background: 'var(--c-primary)',
+                color: 'var(--c-panel)',
+                border: 'var(--border-width) solid var(--c-ink)',
+                padding: '1rem 2rem',
+                fontSize: '1.2rem',
+                cursor: 'pointer',
+                boxShadow: '4px 4px 0 var(--c-ink)'
+              }}
             >
               {status === 'running' ? (
                 <>
                   <span className="loading-spinner"></span>
-                  WARMING UP PRESS...
+                  WARMING UP...
                 </>
               ) : (
                 '✨ PRINT ISSUE #1'
@@ -112,6 +139,14 @@ function App() {
               <button
                 className="btn btn-danger"
                 onClick={stopValidation}
+                style={{
+                  background: 'var(--c-ink)',
+                  color: 'var(--c-primary)',
+                  border: 'var(--border-width) solid var(--c-ink)',
+                  padding: '1rem 2rem',
+                  fontSize: '1.2rem',
+                  cursor: 'pointer'
+                }}
               >
                 🛑 STOP PRESS
               </button>
@@ -119,7 +154,7 @@ function App() {
           </div>
 
           {error && (
-            <div className="badge badge-error" style={{ marginTop: 'var(--space-md)', transform: 'rotate(2deg)' }}>
+            <div className="badge badge-error" style={{ marginTop: 'var(--space-md)', transform: 'rotate(2deg)', background: 'var(--c-danger-bg)', color: 'var(--c-danger)', border: '2px solid var(--c-danger)' }}>
               ❌ JAM: {error}
             </div>
           )}

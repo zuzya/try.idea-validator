@@ -597,7 +597,7 @@ def simulation_node(payload: dict) -> dict:
         history.append({"role": "respondent", "content": persona_thought.verbal_response})
         
         # Log
-        conversation_log += f"**Interviewer**: {next_question}\n"
+        conversation_log += f"\n\n**Interviewer**: {next_question}\n"
 
         personas_response_text = persona_thought.verbal_response
         conversation_log += f"\n**{p.name}:** {personas_response_text} *(Mood: {persona_thought.mood})*\n> Inner: {persona_thought.inner_monologue}\n"
